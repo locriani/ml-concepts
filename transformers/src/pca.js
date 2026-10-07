@@ -1,5 +1,6 @@
-// Top-3 principal coordinates of n vectors. Works on the n x n Gram matrix (n is small, dimension is not),
-// power iteration with deflation, deterministic start so the picture is stable between runs.
+// Computes top 3 principal coordinates for n input vectors.
+// Operates on the n by n Gram matrix using power iteration and matrix deflation.
+// Uses deterministic initialization for reproducible visual projection.
 
 export function pca3(vecs) {
   const n = vecs.length, d = vecs[0].length;
