@@ -1,0 +1,22 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Claude Code state
+.claude/
+
+# Model weights are downloaded in the browser, never committed
+*.safetensors
+*.onnx
+*.onnx_data
+*.gguf
+*.bin
+
+# Tooling, if a build or package step is ever added
+node_modules/
+dist/
+.env
+.env.*
+*.log

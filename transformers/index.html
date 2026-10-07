@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transformer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script type="module" src="src/app.js"></script>
+</head>
+<body>
+<main class="page">
+
+  <header class="head">
+    <div class="head-row">
+      <h1>Transformer</h1>
+      <span class="mono-id">SmolLM2-135M &middot; 30 layers &middot; 9 heads &middot; d=576 &middot; 135M params</span>
+    </div>
+    <p class="muted">A real transformer, not a mock-up. Every number on this page comes from the published weights of SmolLM2-135M, run in your browser: the tokenizer, the embeddings, every attention head in every layer, the MLPs, and the next-token scores. It reads left to right, one token at a time, and the same machinery that scores your sentence is what writes new text. Type a sentence, pick a token, then step through the model.</p>
+  </header>
+
+  <section id="gate" class="panel gate">
+    <div class="stack tight grow">
+      <span class="lbl">Model</span>
+      <p id="gateText" class="muted">Weights are 269 MB, downloaded once from the Hugging Face hub and cached in this browser. Nothing is sent anywhere.</p>
+      <div class="bar tall" id="gateBar" hidden><i id="gateFill" style="width:0%"></i></div>
+    </div>
+    <button id="loadModel" class="btn pri">Load model</button>
+  </section>
+
+  <div id="app" class="col" hidden>
+
+    <section id="ctx" class="panel ctx">
+      <div class="stack grow">
+        <label for="text" class="lbl">Sentence</label>
+        <div class="row"><input id="text" class="text" type="text" autocomplete="off" value="The cat sat on the mat because it was tired."><button id="run" class="btn pri">Run</button></div>
+        <span class="lbl">Tokens &middot; follow one</span>
+        <div id="chips" class="chips"></div>
+      </div>
+      <div class="stack tight">
+        <span class="lbl">Layer</span>
+        <div id="layers" class="chips"></div>
+      </div>
+    </section>
+
+    <nav id="tabs" class="tabs" aria-label="Stages"></nav>
+
+    <section class="panel">
+      <div class="panel-h">
+        <h2 id="stageTitle"></h2>
+        <p id="stageText" class="muted"></p>
+      </div>
+      <div class="panel-b">
+
+        <div id="s1" hidden><div id="s1out" class="col"></div></div>
+
+        <div id="s2" hidden class="col">
+          <div class="controls">
+            <label class="check" for="scale"><input id="scale" type="checkbox" checked> Scale scores by &radic;d<sub>k</sub> (8)</label>
+          </div>
+          <div id="s2out" class="col"></div>
+        </div>
+
+        <div id="s3" hidden><div id="s3out" class="col"></div></div>
+
+        <div id="s4" hidden><div id="s4out" class="col"></div></div>
+
+        <div id="s5" hidden><div id="s5out" class="col"></div></div>
+
+        <div id="s6" hidden class="col">
+          <div class="viewport"><canvas id="space3d" class="cv" tabindex="0" aria-label="3D view of the token vectors across layers. Drag to rotate, scroll to zoom, shift-drag to pan; arrow keys and + / - also work."></canvas></div>
+          <div class="legend">
+            <span><i style="background:var(--accent)"></i>followed token</span>
+            <span><i style="background:var(--med)"></i>first token (attention sink)</span>
+            <span><i style="background:var(--muted)"></i>other token</span>
+            <span><i style="background:var(--ok)"></i>path of the followed token through the layers</span>
+            <span><i style="background:var(--accent)"></i>attention between a pair of tokens, brighter is stronger</span>
+            <span><i style="background:var(--fg)"></i>the pair followed on the Attention page</span>
+          </div>
+          <div class="controls">
+            <div class="stack tight grow">
+              <label for="prog" class="lbl">Depth in the model &middot; <span id="progText"></span></label>
+              <input id="prog" type="range" min="0" max="30" step="0.01" value="30">
+              <div class="spread"><span class="lbl">embeddings</span><span class="lbl">layer 15</span><span class="lbl">layer 30</span></div>
+            </div>
+            <button id="reset6" class="btn">Reset view</button>
+          </div>
+        </div>
+
+        <div id="s7" hidden class="col">
+          <div id="s7gate" class="col">
+            <span class="lbl">Loading word space</span>
+            <p id="idxText" class="muted small">Embedding words…</p>
+            <div class="bar tall"><i id="idxFill" style="width:0%"></i></div>
+            <p class="note">Once per visit: the model's 49,152-token vocabulary is decoded and its embedding table is centered, so arithmetic results can be matched against every word. It takes a few seconds.</p>
+          </div>
+          <div id="s7body" class="col" hidden>
+          <div class="viewport"><canvas id="wordSpace" class="cv" tabindex="0" aria-label="3D map of word embeddings. Drag to rotate, scroll to zoom, shift-drag to pan; arrow keys and + / - also work."></canvas></div>
+          <div class="controls">
+            <div class="stack tight grow">
+              <label for="wordIn" class="lbl">Add your own word</label>
+              <div class="row"><input id="wordIn" class="text" type="text" autocomplete="off" placeholder="e.g. tiger"><button id="addWord" class="btn">Add</button></div>
+            </div>
+            <button id="reset7" class="btn">Reset view</button>
+          </div>
+          <div class="stack">
+            <label for="expr" class="lbl">Vector arithmetic &middot; add and subtract word vectors</label>
+            <div class="row"><input id="expr" class="text" type="text" autocomplete="off" value="king - man + woman" placeholder="e.g. king - man + woman"><button id="calc" class="btn pri">Calculate</button></div>
+            <div id="examples" class="chips"></div>
+          </div>
+          <div id="s7calc" class="col"></div>
+          <div id="s7out" class="col"></div>
+          </div>
+        </div>
+
+        <div id="s8" hidden class="col">
+          <div id="s8body" class="col">
+            <div class="stack tight">
+              <label for="gprompt" class="lbl">Prompt</label>
+              <div class="row"><input id="gprompt" class="text" type="text" autocomplete="off" value="The cat sat on the mat because it"><button id="gstart" class="btn pri">Start</button></div>
+            </div>
+            <div class="stack tight"><span class="lbl">Text so far &middot; one chip per token, generated ones in teal</span><div id="gtext" class="chips"></div></div>
+            <div class="controls">
+              <div class="stack tight grow">
+                <label for="gtemp" class="lbl">Temperature &middot; <span id="gtempText">1.0</span></label>
+                <input id="gtemp" type="range" min="0.1" max="2" step="0.1" value="1">
+              </div>
+              <div class="stack tight grow">
+                <label for="gk" class="lbl">Top K &middot; only the <span id="gkText">40</span> most likely tokens can be picked</label>
+                <input id="gk" type="range" min="1" max="100" step="1" value="40">
+              </div>
+              <button id="gsample" class="btn pri">Sample next token</button>
+              <button id="ggreedy" class="btn">Take the top token</button>
+            </div>
+            <div id="gout" class="col"></div>
+            <div class="controls">
+              <div class="stack tight"><span class="lbl">Layer</span><div id="glayers" class="chips"></div></div>
+              <div class="stack tight"><span class="lbl">Head</span><div id="gheads" class="chips"></div></div>
+            </div>
+            <div id="gattn" class="col"></div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <p class="foot">Computed live in this page from the model's published weights, using transformers.js for tokenization.</p>
+</main>
+</body>
+</html>
