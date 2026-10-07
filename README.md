@@ -26,6 +26,7 @@ One real model, run in the browser from its published weights. Every number on t
 ```bash
 python3 -m http.server 5391 -d transformers   # then open http://localhost:5391
 node transformers/llama.test.mjs               # forward-pass invariants on synthetic weights
+npx -y firebase-tools@15.32.1 deploy --only hosting   # publish to https://ml-concepts.canwetakethis.online (Firebase project canwetakethisonline, needs `firebase login`)
 ```
 
 ### Notes

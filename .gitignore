@@ -20,3 +20,6 @@ dist/
 .env
 .env.*
 *.log
+
+# Firebase deploy cache
+.firebase/
