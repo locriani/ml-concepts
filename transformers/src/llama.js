@@ -3,7 +3,7 @@
 // Layers include SwiGLU feed-forward networks without bias parameters.
 // The output projection ties to the token embedding matrix.
 // Linear weight tensors use row-major layout where each row forms an output dimension.
-// A KV cache provides constant compute cost per generated token.
+// A KV cache keeps earlier keys and values so a new token does not recompute them.
 
 export const SMOLLM2_135M = { layers: 30, d: 576, heads: 9, kv: 3, ff: 1536, theta: 1e5, eps: 1e-5 };
 
