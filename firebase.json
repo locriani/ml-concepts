@@ -1,0 +1,7 @@
+{
+  "hosting": {
+    "site": "ml-concepts",
+    "public": "transformers",
+    "ignore": ["firebase.json", "**/.*", "**/*.test.mjs"]
+  }
+}
