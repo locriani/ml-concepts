@@ -60,12 +60,13 @@ function stripCanvas(arr, n, d) {
 }
 
 // arr is [n, d] row-major; labels[i] = [main, small]
-function strip(name, desc, arr, n, d, labels, on, rowH = 17, hue = C.accent) {
+function strip(name, desc, arr, n, d, labels, on, rowH = 17, hue = C.accent, pick = null) { // pick(i): makes row label i a button
   const box = el('div', 'stack tight');
   box.append(el('div', 'controls', `<span class="step-name" style="color:${hue}">${name}</span><span class="muted small">${desc}</span>`));
   const s = el('div', 'strip'), l = el('div', 'strip-l');
   labels.forEach((t, i) => {
-    const r = el('div', i === on ? 'on' : '', `<span>${esc(t[0])}</span><span class="faint">${esc(t[1] ?? '')}</span>`);
+    const r = el(pick ? 'button' : 'div', i === on ? 'on' : '', `<span>${esc(t[0])}</span><span class="faint">${esc(t[1] ?? '')}</span>`);
+    if (pick) r.onclick = () => pick(i);
     r.style.height = rowH + 'px';
     l.append(r);
   });
@@ -78,11 +79,16 @@ function strip(name, desc, arr, n, d, labels, on, rowH = 17, hue = C.accent) {
 
 const tokLabels = () => pieces.map((p, i) => [vis(p), tr.ids[i]]);
 
-function heat(at, n, onRow, onCell) {
+function heat(at, n, onRow, onCell, onCol) {
   const wrap = el('div', 'scroll'), g = el('div', 'heat');
   const hd = el('div', 'heat-r hrow');
   hd.append(el('div', 'rowbtn'));
-  pieces.forEach((p) => hd.append(el('div', 'hd', esc(vis(p)))));
+  pieces.forEach((p, j) => {
+    const c = el('button', 'hd', esc(vis(p)));
+    c.title = `key token ${vis(p)}`;
+    c.onclick = () => onCol(j);
+    hd.append(c);
+  });
   g.append(hd);
   for (let i = 0; i < n; i++) {
     const r = el('div', 'heat-r'), b = el('button', 'rowbtn' + (i === q ? ' on' : ''), esc(vis(pieces[i])));
@@ -114,8 +120,15 @@ function miniHeat(at, n, qrow) {
   return c;
 }
 
-const barRow = (label, val, text, on, w = 110, color = C.accent) =>
-  el('div', 'tr' + (on ? ' on' : ''), `<span class="mono" style="flex:0 0 ${w}px">${esc(label)}</span><div class="bar"><i style="width:${clamp(val, 0, 1) * 100}%;background:${color}"></i></div><span class="num">${text}</span>`);
+const barRow = (label, val, text, on, w = 110, color = C.accent, pick = null) => { // pick: makes the whole row a button
+  const r = el(pick ? 'button' : 'div', 'tr' + (on ? ' on' : ''), `<span class="mono" style="flex:0 0 ${w}px">${esc(label)}</span><div class="bar"><i style="width:${clamp(val, 0, 1) * 100}%;background:${color}"></i></div><span class="num">${text}</span>`);
+  if (pick) r.onclick = pick;
+  return r;
+};
+// the key token of the followed pair is chosen: the query moves later if it came before the key
+const pickKey = (j) => { kj = j; q = Math.max(q, j); render(); };
+const pickQuery = (i) => { q = i; render(); };
+const pickHead = (h) => { head = h; render(); };
 
 // ---------- stages ----------
 const sqrtDk = () => Math.sqrt(tr.d / tr.heads);
@@ -167,7 +180,7 @@ function s1() {
 
   const near = el('div', 'table'), mine = [...Array(n).keys()].filter((i) => i !== q).map((i) => [i, cosine(row(embed.word, q, d), row(embed.word, i, d))]).sort((x, y) => y[1] - x[1]).slice(0, 4);
   near.append(el('div', 'tr th', `<span class="lbl">Tokens whose vector points most like ${tok}'s (cosine) · in this sentence, then in the whole vocabulary</span>`));
-  mine.forEach(([i, c]) => near.append(barRow(vis(pieces[i]), Math.max(0, c), c.toFixed(2), false, 110)));
+  mine.forEach(([i, c]) => near.append(barRow(vis(pieces[i]), Math.max(0, c), c.toFixed(2), false, 110, C.accent, () => pickQuery(i))));
   nearTokens(tr.ids[q]).forEach(([id, c]) => near.append(barRow(vis(piece(id)), Math.max(0, c), c.toFixed(2), false, 110, C.accent)));
 
   // illustration only: the classic sinusoidal position vector, as the original Transformer added it
@@ -181,14 +194,14 @@ function s1() {
     P(`The sentence is cut into <b>${n} tokens</b>. Each token is a number (its id); the id picks one row of the model's embedding table, which has one row for each of the ${(W[WTE].length / d).toLocaleString()} tokens in the vocabulary and ${d} numbers per row. Click a row to follow that token.`),
     t,
     P(`The rows below are those rows of the table, copied out. They are the same for a token wherever it appears and whatever surrounds it: this is the token on its own, before any context. Meaning is in the direction a vector points, which is why the tokens in the next table are the ones whose vectors point most like ${tok}'s.`),
-    strip('word', 'row of the embedding table for this token id: the input to layer 1', embed.word, n, d, lab, q),
+    strip('word', 'row of the embedding table for this token id: the input to layer 1', embed.word, n, d, lab, q, 17, C.accent, pickQuery),
     near,
     el('span', 'lbl', 'Where does position go?'),
     P('Attention on its own has no idea of order: shuffle the tokens and every token still sees the same set. So a model has to be told where each token is. This model does it inside attention. Many others do it right here, in the embedding, by adding a second vector to the token\'s vector:'),
     pos,
     P(`Below is what the first kind looks like for this sentence. It is an illustration, not part of this model: the classic sine and cosine position vectors, computed live, added to the embeddings above (the embeddings scaled by √d = ${sc}, as in the original paper; typical size of a number is then ${rms(scaled).toFixed(2)} for the tokens and ${rms(pe).toFixed(2)} for the positions). Fast waves in the first dimensions, slow waves later, so every position gets its own pattern.`),
-    strip('position', 'one fixed vector per position 0, 1, 2…, the same for any text', pe, n, d, lab, q, 17, C.high),
-    strip('token + position', `what such a model would send into layer 1; ${tok} here is ${cosine(row(scaled, q, d), row(summed, q, d)).toFixed(2)} cosine from its plain embedding`, summed, n, d, lab, q, 17, C.ok),
+    strip('position', 'one fixed vector per position 0, 1, 2…, the same for any text', pe, n, d, lab, q, 17, C.high, pickQuery),
+    strip('token + position', `what such a model would send into layer 1; ${tok} here is ${cosine(row(scaled, q, d), row(summed, q, d)).toFixed(2)} cosine from its plain embedding`, summed, n, d, lab, q, 17, C.ok, pickQuery),
     el('p', 'note', 'With position added, the same word at two places in a text would enter layer 1 as two different vectors. Here it enters as one vector, and attention tells the two places apart by rotating queries and keys (see the Attention stage).'),
   );
 }
@@ -218,18 +231,19 @@ function attnSteps() {
   const qv = row(L.q, q, d).subarray(head * dh, (head + 1) * dh), K = cols(L.k, kw, g, dh, m), V = cols(L.v, kw, g, dh, m);
   const w = row(at, q, n).subarray(0, m), score = Array.from(sc.subarray(q * n, q * n + m)), raw = Array.from(L.scores[head].subarray(q * n, q * n + m), (x) => x * k);
   const grp = g / dh, p = (html) => el('p', 'small', html), th = (...c) => el('div', 'tr th', c.join(''));
-  const blocked = () => Array.from({ length: n - m }, (_, i) => el('div', 'tr faint', `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[m + i]))}</span><span class="num">blocked</span>`));
+  const keyRow = (j, html) => { const b = el('button', 'tr' + (j === key() ? ' on' : '') + (j > q ? ' faint' : ''), html); b.onclick = () => pickKey(j); return b; }; // a key-token row: click to follow that key (a later token also moves the query to it)
+  const blocked = () => Array.from({ length: n - m }, (_, i) => keyRow(m + i, `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[m + i]))}</span><span class="num">blocked</span>`));
   const t = el('div', 'table'), body = [];
   if (astep === 0) {
     body.push(
       p(`Each token's normalised vector (RMSNorm 1) is multiplied by three learned matrices. The <span class="step-name">query</span> says what a token is looking for, the <span class="step-name">key</span> what a token offers to be found by, the <span class="step-name">value</span> what it hands over once found. Head ${head} has its own 64-number query; its keys and values come from group ${grp}, shared with heads ${grp * 3} to ${grp * 3 + 2}. Query and key are rotated by an angle that grows with the token's position, so a score will depend on how far apart two tokens are.`),
       strip('RMSNorm 1', `${tok}'s vector: the input to all three matrices`, row(L.ln1, q, d), 1, d, me, -1, 22, C.muted),
       strip('query', `${tok}'s 64 numbers in head ${head}, after rotation`, qv, 1, dh, me, -1, 22, C.accent),
-      strip('keys', `one row for ${tok} and each token before it, rotated by its own position`, K, m, dh, lab, q, 17, C.accent),
-      strip('values', 'what each of those tokens passes on', V, m, dh, lab, q, 17, C.ok));
+      strip('keys', `one row for ${tok} and each token before it, rotated by its own position`, K, m, dh, lab, key(), 17, C.accent, pickKey),
+      strip('values', 'what each of those tokens passes on', V, m, dh, lab, key(), 17, C.ok, pickKey));
   } else if (astep === 1) {
     t.append(th(`<span class="lbl" style="flex:0 0 110px">key token</span>`, `<span class="lbl num">query · key</span>`, `<span class="lbl" style="flex:1">${scaled ? `÷ √d<sub>k</sub> = score` : 'score'}</span>`, `<span class="lbl num">score</span>`));
-    raw.forEach((r, j) => t.append(el('div', 'tr' + (j === q ? ' on' : ''), `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[j]))}</span><span class="num">${r.toFixed(2)}</span>${sbar(score[j], Math.max(...score.map(Math.abs)) || 1)}<span class="num">${score[j].toFixed(2)}</span>`)));
+    raw.forEach((r, j) => t.append(keyRow(j,  `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[j]))}</span><span class="num">${r.toFixed(2)}</span>${sbar(score[j], Math.max(...score.map(Math.abs)) || 1)}<span class="num">${score[j].toFixed(2)}</span>`)));
     blocked().forEach((r) => t.append(r));
     body.push(
       p(`The query of ${tok} is compared with the key of every token it may read: multiply the 64 numbers pairwise and add them up. A large positive sum means the key matches what the query is looking for (teal); negative means it does not (orange). Later tokens are blocked: they have not been written yet.`),
@@ -238,7 +252,7 @@ function attnSteps() {
   } else if (astep === 2) {
     const mx = Math.max(...score), ex = score.map((x) => Math.exp(x - mx)), sum = ex.reduce((x, y) => x + y, 0);
     t.append(th(`<span class="lbl" style="flex:0 0 110px">key token</span>`, `<span class="lbl num">score</span>`, `<span class="lbl num">e<sup>score − max</sup></span>`, `<span class="lbl" style="flex:1">weight = that ÷ ${sum.toFixed(2)}</span>`, `<span class="lbl num">weight</span>`));
-    ex.forEach((e, j) => t.append(el('div', 'tr' + (j === q ? ' on' : ''), `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[j]))}</span><span class="num">${score[j].toFixed(2)}</span><span class="num">${e.toFixed(3)}</span><div class="bar"><i style="width:${w[j] * 100}%"></i></div><span class="num">${w[j].toFixed(2)}</span>`)));
+    ex.forEach((e, j) => t.append(keyRow(j,  `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[j]))}</span><span class="num">${score[j].toFixed(2)}</span><span class="num">${e.toFixed(3)}</span><div class="bar"><i style="width:${w[j] * 100}%"></i></div><span class="num">${w[j].toFixed(2)}</span>`)));
     blocked().forEach((r) => t.append(r));
     body.push(
       p(`Softmax turns the scores into weights: raise e to each score (after subtracting the biggest, so nothing overflows), then divide by the total so the weights add up to 1. The best-matching token gets the most weight, but every visible token keeps some.`),
@@ -250,7 +264,7 @@ function attnSteps() {
     const own = row(L.ctx, q, d).subarray(head * dh, (head + 1) * dh), err = Math.max(...out.map((x, c) => Math.abs(x - own[c])));
     body.push(
       p(`Each token's value is multiplied by its weight, so a token that got a weight of 0.01 contributes almost nothing (dark rows). Adding the rows up gives this head's output for ${tok}: a blend of what the tokens it attends to have to offer.`),
-      strip('weight × value', 'the value rows from step 1, each scaled by its weight', wv, m, dh, lab, q, 17, C.ok),
+      strip('weight × value', 'the value rows from step 1, each scaled by its weight', wv, m, dh, lab, key(), 17, C.ok, pickKey),
       strip('head output', `the sum of the rows above: ${tok}'s 64 numbers from head ${head}`, out, 1, dh, me, -1, 22, C.accent),
       el('p', 'note', `Largest difference from the head output the model computed: ${err.toExponential(1)}.`));
   } else {
@@ -258,7 +272,7 @@ function attnSteps() {
     open.onclick = () => { stage = 3; render(); };
     body.push(
       p(`All ${heads} heads do this at the same time, each with its own query, keys and weights, and each ends with 64 numbers. Side by side they form the ${d}-number attention context (one row per head; the head you opened is outlined). A learned output matrix mixes the heads together, and that result is added to ${tok}'s vector.`),
-      strip('all heads', `${tok}'s ${heads} head outputs side by side = attention context`, row(L.ctx, q, d), heads, dh, Array.from({ length: heads }, (_, h) => ['head ' + h]), head, 22, C.accent),
+      strip('all heads', `${tok}'s ${heads} head outputs side by side = attention context`, row(L.ctx, q, d), heads, dh, Array.from({ length: heads }, (_, h) => ['head ' + h]), head, 22, C.accent, pickHead),
       strip('attention output', 'the heads mixed by the output matrix', row(L.attnOut, q, d), 1, d, me, -1, 22, C.accent),
       el('div', 'row').appendChild(open).parentElement);
   }
@@ -285,7 +299,7 @@ function s2() {
     headCards(),
     attnSteps(),
     el('span', 'lbl', 'Every token as the query (click a row label to follow it, or a cell to follow that pair)'),
-    heat(at, n, (i) => { q = i; render(); }, (i, j) => { q = i; kj = j; render(); }),
+    heat(at, n, (i) => { q = i; render(); }, (i, j) => { q = i; kj = j; render(); }, pickKey),
     pairPanel(),
   );
 }
@@ -301,12 +315,14 @@ function pairPanel() {
   }
   const g = el('div', 'heat'), hr = el('div', 'heat-r hrow');
   hr.append(el('div', 'rowbtn'));
-  for (let h = 0; h < tr.heads; h++) hr.append(el('div', 'hh', 'h' + h));
+  for (let h = 0; h < tr.heads; h++) { const c = el('button', 'hh', 'h' + h); c.title = `head ${h}`; c.onclick = () => pickHead(h); hr.append(c); }
   hr.append(el('div', 'hh', 'mean'));
   g.append(hr);
   for (let l = tr.layers.length - 1; l >= 0; l--) {
     const r = el('div', 'heat-r'), vals = tr.layers[l].attn.map((a) => a[i * n + j]), mean = vals.reduce((x, y) => x + y, 0) / vals.length;
-    r.append(el('div', 'rowbtn' + (l + 1 === layer ? ' on' : ''), `layer ${l + 1}`));
+    const lb = el('button', 'rowbtn' + (l + 1 === layer ? ' on' : ''), `layer ${l + 1}`);
+    lb.onclick = () => { layer = l + 1; render(); };
+    r.append(lb);
     [...vals, mean].forEach((v, h) => {
       const c = el('button', 'hc' + (l + 1 === layer && h === head ? ' on' : ''), v >= 0.005 ? (v > 0.995 ? '1' : v.toFixed(2).replace(/^0/, '')) : '');
       c.style.background = mix(h === vals.length ? ORANGE : TEAL, Math.sqrt(clamp(v, 0, 1)));
@@ -368,11 +384,13 @@ function s3() {
   });
   const g = el('div', 'heat'), hr = el('div', 'heat-r hrow');
   hr.append(el('div', 'rowbtn'));
-  for (let h = 0; h < tr.heads; h++) hr.append(el('div', 'hh', 'h' + h));
+  for (let h = 0; h < tr.heads; h++) { const c = el('button', 'hh', 'h' + h); c.title = `head ${h}`; c.onclick = () => pickHead(h); hr.append(c); }
   g.append(hr);
   for (let l = tr.layers.length - 1; l >= 0; l--) {
     const r = el('div', 'heat-r');
-    r.append(el('div', 'rowbtn' + (l + 1 === layer ? ' on' : ''), `layer ${l + 1}`));
+    const lb = el('button', 'rowbtn' + (l + 1 === layer ? ' on' : ''), `layer ${l + 1}`);
+    lb.onclick = () => { layer = l + 1; render(); };
+    r.append(lb);
     for (let h = 0; h < tr.heads; h++) {
       const v = headStats(l, h)[metric], c = el('button', 'hc' + (l + 1 === layer && h === head ? ' on' : ''), v.toFixed(2).replace(/^0/, ''));
       c.style.background = mix(TEAL, Math.sqrt(clamp(v, 0, 1)));
@@ -389,13 +407,13 @@ function s3() {
   const st = headStats(layer - 1, head), at = tr.layers[layer - 1].attn[head];
   const prof = el('div', 'table');
   prof.append(el('div', 'tr th', `<span class="lbl">Layer ${layer} · head ${head}: ${esc(st.tag)}</span>`));
-  METRICS.forEach(([k, name]) => prof.append(barRow(name, st[k], st[k].toFixed(2), k === metric, 130)));
+  METRICS.forEach(([k, name]) => prof.append(barRow(name, st[k], st[k].toFixed(2), k === metric, 130, C.accent, () => { metric = k; render(); })));
   const pairs = [];
   for (let i = 1; i < n; i++) for (let j = 0; j <= i; j++) pairs.push([i, j, at[i * n + j]]);
   pairs.sort((a, b) => b[2] - a[2]);
   const links = el('div', 'table');
   links.append(el('div', 'tr th', `<span class="lbl">Strongest links in this head · token → earlier token it reads from</span>`));
-  pairs.slice(0, 10).forEach(([i, j, w]) => links.append(barRow(`${vis(pieces[i])} → ${vis(pieces[j])}`, w, w.toFixed(2), false, 210)));
+  pairs.slice(0, 10).forEach(([i, j, w]) => links.append(barRow(`${vis(pieces[i])} → ${vis(pieces[j])}`, w, w.toFixed(2), false, 210, C.accent, () => { q = i; kj = j; stage = 1; render(); })));
   const open = el('button', 'btn', 'Open in Attention');
   open.onclick = () => { stage = 1; render(); };
   out.replaceChildren(
@@ -415,8 +433,8 @@ function s4() {
   const P = (html) => el('p', 'small', html), share = (v) => (100 * l2(v) / l2(inp)).toFixed(0) + '%', cos = (v) => `cosine to the layer input ${cosine(v, inp).toFixed(3)}`;
   const block = (t, text) => { const b = el('div', 'stack tight'); b.append(el('h2', null, t), P(text)); return b; };
   let i = 0;
-  const stp = (name, why, desc, v, hue, note = '', rows = 1, labels = lab) => {
-    const box = strip(`${++i} · ${name}`, desc, v, rows, v.length / rows, labels, -1, rows > 1 ? 17 : 22, hue);
+  const stp = (name, why, desc, v, hue, note = '', rows = 1, labels = lab, pick = null) => {
+    const box = strip(`${++i} · ${name}`, desc, v, rows, v.length / rows, labels, pick ? head : -1, rows > 1 ? 17 : 22, hue, pick);
     box.children[0].after(P(why));
     box.append(el('span', 'note', `length ${l2(v).toFixed(2)}${note ? ' · ' + note : ''}`));
     return box;
@@ -427,10 +445,7 @@ function s4() {
   const contrib = el('div', 'table');
   contrib.append(el('div', 'tr th', '<span class="lbl">Length of each head\'s output · click one to open it in Attention</span>'));
   hl.forEach((v, h) => {
-    const b = barRow(`head ${h}`, v / hmx, v.toFixed(2), h === head, 110);
-    b.style.cursor = 'pointer';
-    b.onclick = () => { head = h; stage = 1; render(); };
-    contrib.append(b);
+    contrib.append(barRow(`head ${h}`, v / hmx, v.toFixed(2), h === head, 110, C.accent, () => { head = h; stage = 1; render(); }));
   });
 
   const hid = r(L.ffHidden, ffD), gate = r(L.gate, ffD), sq = Array.from(hid, (x) => x * x).sort((x, y) => y - x), tot = sq.reduce((x, y) => x + y, 0) || 1, top = Math.ceil(ffD / 10);
@@ -458,7 +473,7 @@ function s4() {
     block('Half 1 · attention: gather from other tokens', `The token reads the tokens before it and collects what is relevant. This half is what the Attention page walks through in detail.`),
     stp('input', `The vector for ${tok} so far. It is called the residual stream: every layer reads it and adds to it, and none replaces it. In layer 1 it is the token's embedding; in later layers it also holds everything earlier layers wrote.`, 'the token\'s vector coming into this layer', inp, C.fg),
     stp('RMSNorm 1', `Attention does not read the stream directly. The vector is divided by its own typical size (root mean square), so it no longer matters how large the stream has grown, then multiplied by a learned number per dimension that sets the scale attention expects.`, 'normalised before attention reads it', r(L.ln1), C.muted, norm(r(L.ln1))),
-    stp('attention context', `All ${heads} heads read the normalised vectors of the tokens before this one and each mixes their values into ${dh} numbers (the five steps on the Attention page). One row per head, side by side.`, `${heads} heads × ${dh} numbers: each head's weighted mix of values`, r(L.ctx), C.accent, '', heads, Array.from({ length: heads }, (_, h) => ['head ' + h])),
+    stp('attention context', `All ${heads} heads read the normalised vectors of the tokens before this one and each mixes their values into ${dh} numbers (the five steps on the Attention page). One row per head, side by side.`, `${heads} heads × ${dh} numbers: each head's weighted mix of values`, r(L.ctx), C.accent, '', heads, Array.from({ length: heads }, (_, h) => ['head ' + h]), pickHead),
     contrib,
     el('p', 'note', 'A long output is not the same as a big influence: the next step can amplify or mute any head.'),
     stp('attention output', `A learned ${d}×${d} matrix (the output projection) mixes the ${heads} heads' results into one vector shaped like the token's vector. This is the update attention proposes.`, 'context mixed by the output matrix', r(L.attnOut), C.accent, `adds ${share(r(L.attnOut))} of the input's length`),
@@ -662,7 +677,7 @@ function list7() {
   });
   const t = el('div', 'table');
   t.append(el('div', 'tr th', `<span class="lbl">Nearest to “${esc(words[sel].w)}” by cosine</span>`));
-  neighbors().forEach(([i, s]) => t.append(barRow(words[i].w, s, s.toFixed(2), false, 110, hueOf(words[i].w))));
+  neighbors().forEach(([i, s]) => t.append(barRow(words[i].w, s, s.toFixed(2), false, 110, hueOf(words[i].w), () => { sel = i; list7(); })));
   const legend = el('div', 'legend', GROUPS.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join('') + `<span><i style="background:${C.fg}"></i>yours</span>${probe ? `<span><i style="background:${C.accent}"></i>closest vocabulary words to yours</span>` : ''}<span><i style="background:transparent;border:2px solid ${C.accent}"></i>selected</span><span><i style="background:transparent;border:2px solid ${C.fg}"></i>nearest 6</span>`);
   $('s7out').replaceChildren(legend, chips, t);
   scene7.redraw();
@@ -724,7 +739,7 @@ function showCalc(terms) {
   const near = (list) => list.sort((a, b) => b[1] - a[1]).slice(0, 8);
   const mapT = el('div', 'table'), vocT = el('div', 'table');
   mapT.append(el('div', 'tr th', `<span class="lbl">Closest map words to ${esc(probe.label)}</span>`));
-  near(words.filter((x) => !words_.has(x.w)).map((x) => [x.w, dotv(probe.v, x.v)])).forEach(([w, s]) => mapT.append(barRow(w, s, s.toFixed(2), false, 110, hueOf(w))));
+  near(words.filter((x) => !words_.has(x.w)).map((x) => [x.w, dotv(probe.v, x.v)])).forEach(([w, s]) => mapT.append(barRow(w, s, s.toFixed(2), false, 110, hueOf(w), () => { sel = words.findIndex((x) => x.w === w); list7(); })));
   vocT.append(el('div', 'tr th', `<span class="lbl">Closest words in the model's whole vocabulary (${cand.length.toLocaleString()} whole-word tokens searched)</span>`));
   probe.near.forEach(([id, s]) => vocT.append(barRow(piece(id).trim(), s, s.toFixed(2), false, 110, C.accent)));
   $('s7calc').replaceChildren(
@@ -862,7 +877,24 @@ STAGES.forEach(([name], i) => {
   $('tabs').append(b);
 });
 $('loadModel').onclick = boot;
+const SENTENCES = [
+  'The cat sat on the mat because it was tired.',
+  'The trophy did not fit in the suitcase because it was too big.',
+  'Paris is the capital of France, and Tokyo is the capital of Japan.',
+  'She poured the coffee into the cup and then drank it.',
+  'When the dog barked at the mailman, he ran away.',
+  'The quick brown fox jumps over the lazy dog.',
+  'Water boils at one hundred degrees Celsius at sea level.',
+  'The doctor told the patient that she needed more rest.',
+  'I put the book on the table and it fell off.',
+  'The king asked the queen to open the window.',
+];
 $('run').onclick = run;
+$('random').onclick = () => { // any sentence but the current one
+  const rest = SENTENCES.filter((x) => x !== $('text').value.trim());
+  $('text').value = rest[Math.floor(Math.random() * rest.length)];
+  run();
+};
 $('text').addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
 $('scale').onchange = (e) => { scaled = e.target.checked; render(); };
 $('prog').oninput = () => { progText(); scene6.redraw(); };

@@ -71,6 +71,7 @@ textarea.text { resize: vertical; width: 100%; }
 button.tr { cursor: pointer; background: transparent; border: 0; border-bottom: 1px solid var(--rule); }
 button.tr:hover { background: var(--raised); }
 button.tr.on { background: var(--accent-dim); }
+button.tr:last-child { border-bottom: 0; }
 .mono { font: 400 13px/19px var(--mono); }
 .num { font: 400 12.5px/19px var(--mono); text-align: right; flex: 0 0 56px; }
 .bar { flex: 1 1 0; height: 6px; background: var(--sunk); }
@@ -82,8 +83,10 @@ button.tr.on { background: var(--accent-dim); }
 /* embedding strips: one row per token, one pixel column per dimension */
 .strip { display: flex; border: 1px solid var(--rule); border-radius: var(--r-md); background: var(--sunk); }
 .strip-l { flex: 0 0 120px; display: flex; flex-direction: column; border-right: 1px solid var(--rule); }
-.strip-l > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 8px; font: 400 11.5px/17px var(--mono); overflow: hidden; white-space: nowrap; }
-.strip-l > div.on { background: var(--accent-dim); color: var(--accent); }
+.strip-l > div, .strip-l > button { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 0 8px; font: 400 11.5px/17px var(--mono); overflow: hidden; white-space: nowrap; }
+.strip-l > button { border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+.strip-l > button:hover { background: var(--raised); }
+.strip-l > .on { background: var(--accent-dim); color: var(--accent); }
 .strip canvas { flex: 1 1 0; min-width: 0; display: block; image-rendering: pixelated; }
 
 /* heatmap */
@@ -93,6 +96,8 @@ button.tr.on { background: var(--accent-dim); }
 .heat .hc { flex: 1 1 0; min-width: 0; text-align: center; font: 400 10.5px/17px var(--mono); padding: 6px 0; overflow: hidden; }
 .hd { flex: 1 1 0; min-width: 0; height: 76px; padding: 6px 0; display: flex; align-items: center; justify-content: flex-start; writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 400 11.5px/17px var(--mono); color: var(--muted); }
 .rowbtn { cursor: pointer; flex: 0 0 72px; background: var(--sunk); border: 0; color: var(--muted); text-align: right; padding: 0 8px; min-height: 30px; font: 400 11.5px/17px var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+button.hd, button.hh { border: 0; background: transparent; cursor: pointer; }
+.hd:hover, .hh:hover { color: var(--fg); }
 .rowbtn:hover { color: var(--fg); background: var(--raised); }
 .rowbtn.on { background: var(--accent-dim); color: var(--accent); }
 
