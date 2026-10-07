@@ -1,10 +1,10 @@
-// Minimal 3D scatter on a 2D canvas: yaw/pitch rotation, light perspective, zoom and pan.
-// Drag rotates; shift-drag, right-drag or Shift+arrows pan; scroll, pinch or +/- zoom; arrows rotate.
-// paint(s) draws one frame. World coords are [x, y(up), z(depth)].
+// Interactive 3D point visualizer for HTML canvas.
+// Supports yaw and pitch rotation alongside perspective projection and zoom and pan.
+// Function paint renders each frame using three-dimensional coordinates.
 
 export function createScene(canvas, paint) {
   const home = { yaw: -0.7, pitch: 0.3 };
-  const rot = { ...home }, view = { zoom: 1, x: 0, y: 0 }; // view.x/y: pan in pixels
+  const rot = { ...home }, view = { zoom: 1, x: 0, y: 0 }; // View coordinates track pan offset in pixels.
   let drag = null;
 
   const projector = (w, h) => {
@@ -41,7 +41,7 @@ export function createScene(canvas, paint) {
 
   const tilt = (dx, dy) => { rot.yaw += dx; rot.pitch = Math.max(-1.4, Math.min(1.4, rot.pitch + dy)); redraw(); };
   const pan = (dx, dy) => { view.x += dx; view.y += dy; redraw(); };
-  const zoomAt = (r, cx, cy) => { // keep the point under (cx, cy) fixed while scaling
+  const zoomAt = (r, cx, cy) => { // Preserves world coordinates under pointer during zoom scaling.
     const z = Math.max(0.3, Math.min(8, view.zoom * r)), f = z / view.zoom;
     view.x = (cx - canvas.clientWidth / 2) - ((cx - canvas.clientWidth / 2) - view.x) * f;
     view.y = (cy - canvas.clientHeight / 2) - ((cy - canvas.clientHeight / 2) - view.y) * f;
@@ -58,7 +58,7 @@ export function createScene(canvas, paint) {
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-  canvas.addEventListener('wheel', (e) => { // trackpad pinch arrives as ctrl+wheel
+  canvas.addEventListener('wheel', (e) => { // Trackpad pinch gestures map to ctrl and wheel events.
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
     zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), e.clientX - r.left, e.clientY - r.top);
@@ -72,7 +72,7 @@ export function createScene(canvas, paint) {
   });
   new ResizeObserver(redraw).observe(canvas);
 
-  // centre the canvas on a world point at the given zoom
+  // Centers canvas viewport on specified world coordinates at target zoom level.
   const focus = (pt, zoom) => {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     Object.assign(view, { zoom: Math.max(0.3, Math.min(8, zoom)), x: 0, y: 0 });

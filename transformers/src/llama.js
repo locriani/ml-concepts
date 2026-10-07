@@ -1,16 +1,18 @@
-// SmolLM2-135M (Llama architecture) in plain JS, reading the published safetensors weights directly.
-// Pre-RMSNorm blocks, causal grouped-query attention with rotary positions (RoPE), SwiGLU MLP, no biases,
-// output head tied to the token embedding. Linear weights are stored [out, in]: y[o] = row o . x.
-// A KV cache makes generating one token cost one token of compute.
+// SmolLM2-135M implementation reading published safetensors weights.
+// Architecture uses pre-RMSNorm blocks and causal grouped-query attention with RoPE.
+// Layers include SwiGLU feed-forward networks without bias parameters.
+// The output projection ties to the token embedding matrix.
+// Linear weight tensors use row-major layout where each row forms an output dimension.
+// A KV cache provides constant compute cost per generated token.
 
 export const SMOLLM2_135M = { layers: 30, d: 576, heads: 9, kv: 3, ff: 1536, theta: 1e5, eps: 1e-5 };
 
-// Float32 tensors by name, plus .cfg. bf16 is the top half of an f32, so widening is a shift.
+// Parses safetensors into named Float32Array tensors and configuration. Widening bf16 shifts 16 bits into the upper half of float32.
 export function parseSafetensors(buf, cfg = SMOLLM2_135M) {
   const n = Number(new DataView(buf).getBigUint64(0, true));
   const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, n)));
   let base = 8 + n;
-  if (base % 4) { buf = buf.slice(base); base = 0; } // keep typed-array views aligned
+  if (base % 4) { buf = buf.slice(base); base = 0; } // Aligns buffer offset for typed array views.
   const W = { cfg };
   for (const [k, v] of Object.entries(header)) {
     if (k === '__metadata__') continue;
@@ -35,7 +37,7 @@ function rmsNorm(x, g, eps) {
   return y;
 }
 
-// y = W x for W stored [outD, x.length]
+// Computes matrix-vector product for weight dimensions outD by input length.
 function matvec(W, x, outD) {
   const y = new Float32Array(outD), n = x.length;
   for (let o = 0; o < outD; o++) y[o] = dot(W, o * n, x, 0, n);
@@ -44,8 +46,8 @@ function matvec(W, x, outD) {
 
 const silu = (x) => x / (1 + Math.exp(-x));
 
-// Rotary position: each head vector's dims (i, i + dh/2) are rotated by angle pos * theta^(-2i/dh).
-// Scores between two rotated vectors then depend only on how far apart the tokens are.
+// Rotary position embedding rotates paired dimensions across each head by pos times theta^(-2i/dh).
+// Inner products between rotated vectors depend strictly on relative token distance.
 export function rope(v, pos, dh, theta) {
   const h = dh / 2;
   for (let off = 0; off < v.length; off += dh) {
@@ -62,9 +64,9 @@ const EMB = 'model.embed_tokens.weight';
 
 export const newState = (W) => ({ n: 0, K: Array.from({ length: W.cfg.layers }, () => []), V: Array.from({ length: W.cfg.layers }, () => []) });
 
-// Feed new token ids (appended after st.n tokens). Returns { logits, attn } for the LAST new token:
-// attn[layer][head] = Float32Array(st.n) of weights over every token so far (itself included).
-// rec (optional) collects every intermediate, one row per token, for trace().
+// Appends token ids and advances state. Returns next-token logits and attention weights.
+// Array attn stores attention distributions over all visible tokens.
+// Optional parameter rec records intermediate layer activations for tracing.
 export function step(W, st, ids, rec = null) {
   const { d, heads, kv, ff, theta, eps } = W.cfg, dh = d / heads, group = heads / kv, emb = W[EMB];
   const keep = (slot, v) => { if (rec) slot.push(Float32Array.from(v)); };
@@ -85,7 +87,7 @@ export function step(W, st, ids, rec = null) {
       st.V[l].push(matvec(W[P + 'self_attn.v_proj.weight'], a, kv * dh));
       const ctx = new Float32Array(d), rows = [];
       for (let h = 0; h < heads; h++) {
-        const g = Math.floor(h / group) * dh, sc = new Float32Array(p + 1), w = new Float32Array(p + 1); // g: this head's shared key/value slice
+        const g = Math.floor(h / group) * dh, sc = new Float32Array(p + 1), w = new Float32Array(p + 1); // Slice index for shared key and value head.
         let m = -Infinity;
         for (let j = 0; j <= p; j++) { sc[j] = dot(q, h * dh, st.K[l][j], g, dh) / Math.sqrt(dh); m = Math.max(m, sc[j]); }
         let s = 0; for (let j = 0; j <= p; j++) { w[j] = Math.exp(sc[j] - m); s += w[j]; }
@@ -103,7 +105,7 @@ export function step(W, st, ids, rec = null) {
       keep(R?.ln2, m2);
       const gate = matvec(W[P + 'mlp.gate_proj.weight'], m2, ff), up = matvec(W[P + 'mlp.up_proj.weight'], m2, ff);
       keep(R?.gate, gate); keep(R?.up, up);
-      for (let k = 0; k < ff; k++) gate[k] = silu(gate[k]) * up[k]; // SwiGLU: the gate decides how much of each "up" feature passes
+      for (let k = 0; k < ff; k++) gate[k] = silu(gate[k]) * up[k]; // SwiGLU activation: gate values modulate transmission of up-projection features.
       keep(R?.ffHidden, gate);
       const f = matvec(W[P + 'mlp.down_proj.weight'], gate, d);
       keep(R?.ffOut, f);
@@ -115,7 +117,7 @@ export function step(W, st, ids, rec = null) {
   return { logits: logitsOf(W, x), attn };
 }
 
-// residual-stream vector -> scores for every vocabulary token (final RMSNorm, then the tied embedding matrix)
+// Computes vocabulary logits from residual stream vectors via final RMSNorm and tied embeddings.
 export function logitsOf(W, h) {
   const emb = W[EMB], d = h.length, vocab = emb.length / d;
   const hf = rmsNorm(h, W['model.norm.weight'], W.cfg.eps), logits = new Float32Array(vocab);
@@ -123,8 +125,8 @@ export function logitsOf(W, h) {
   return logits;
 }
 
-// Whole prompt in one go, keeping every intermediate as flat [n, width] arrays.
-// scores/attn[layer].[head] are [n, n]; masked (future) scores are -Infinity and their weights 0.
+// Evaluates prompt tokens and records all intermediate activations as flat arrays.
+// Score and attention matrices use dimensions n by n. Masked future positions evaluate to -Infinity and zero weight.
 export function trace(W, ids) {
   const { d, heads } = W.cfg, n = ids.length, st = newState(W);
   const names = ['input', 'ln1', 'q', 'ctx', 'attnOut', 'resAttn', 'ln2', 'gate', 'up', 'ffHidden', 'ffOut', 'out'];
@@ -136,13 +138,13 @@ export function trace(W, ids) {
     n, d, heads, kv: W.cfg.kv, ids, logits,
     embed: { word: flat(rec.embed.word) },
     layers: rec.layers.map((R, l) => ({
-      ...Object.fromEntries(names.map((k) => [k, flat(R[k])])), k: flat(st.K[l]), v: flat(st.V[l]), // q: [n, d]; k, v: [n, kv * dh], rotated keys as the cache holds them
+      ...Object.fromEntries(names.map((k) => [k, flat(R[k])])), k: flat(st.K[l]), v: flat(st.V[l]), // Arrays store rotated keys and values matching KV cache layout.
       scores: R.scores.map((r) => square(r, -Infinity)), attn: R.attn.map((r) => square(r, 0)),
     })),
   };
 }
 
-// logits -> top-k { id, p } under temperature t (softmax over the full vocabulary)
+// Returns top k token predictions under temperature scaling via full vocabulary softmax.
 export function topK(logits, k, t = 1) {
   let m = -Infinity;
   for (const x of logits) if (x > m) m = x;
@@ -153,7 +155,7 @@ export function topK(logits, k, t = 1) {
   return { top: idx.map((id) => ({ id, p: e[id] / s })), probs: e, sum: s };
 }
 
-// draw one id from topK().top in proportion to its probability: the rest of the vocabulary is cut (top-K sampling)
+// Samples a token id from top K candidates proportionally to normalised probabilities.
 export function sample({ top }, rnd = Math.random()) {
   let r = rnd * top.reduce((s, x) => s + x.p, 0);
   for (const x of top) { r -= x.p; if (r <= 0) return x.id; }

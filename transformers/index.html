@@ -17,13 +17,13 @@
       <h1>Transformer</h1>
       <span class="mono-id">SmolLM2-135M &middot; 30 layers &middot; 9 heads &middot; d=576 &middot; 135M params</span>
     </div>
-    <p class="muted">A real transformer, not a mock-up. Every number on this page comes from the published weights of SmolLM2-135M, run in your browser: the tokenizer, the embeddings, every attention head in every layer, the MLPs, and the next-token scores. It reads left to right, one token at a time, and the same machinery that scores your sentence is what writes new text. Type a sentence, pick a token, then step through the model.</p>
+    <p class="muted">SmolLM2-135M runs in the browser. Every number comes from its published weights. The model processes tokens from left to right. The same forward pass scores input sentences and generates new text.</p>
   </header>
 
   <section id="gate" class="panel gate">
     <div class="stack tight grow">
       <span class="lbl">Model</span>
-      <p id="gateText" class="muted">Weights are 269 MB, downloaded once from the Hugging Face hub and cached in this browser. What you type never leaves your browser; the page only fetches its font (Google Fonts), the tokenizer library (jsDelivr) and these weights (Hugging Face).</p>
+      <p id="gateText" class="muted">Weights total 269 MB. The browser downloads them once from the Hugging Face hub and caches them locally. Typed text never leaves the browser. The page requests only the Google Fonts stylesheet and the jsDelivr tokenizer script and the Hugging Face model weights.</p>
       <div class="bar tall" id="gateBar" hidden><i id="gateFill" style="width:0%"></i></div>
     </div>
     <button id="loadModel" class="btn pri">Load model</button>
@@ -35,7 +35,7 @@
       <div class="stack grow">
         <label for="text" class="lbl">Sentence</label>
         <div class="row"><input id="text" class="text" type="text" autocomplete="off" value="The cat sat on the mat because it was tired."><button id="run" class="btn pri">Run</button><button id="random" class="btn">Random sentence</button></div>
-        <span class="lbl">Tokens &middot; follow one</span>
+        <span class="lbl">Tokens &middot; followed token</span>
         <div id="chips" class="chips"></div>
         <div class="stack tight">
           <span class="lbl">Layer</span>
@@ -69,14 +69,14 @@
         <div id="s5" hidden><div id="s5out" class="col"></div></div>
 
         <div id="s6" hidden class="col">
-          <div class="viewport"><canvas id="space3d" class="cv" tabindex="0" aria-label="3D view of the token vectors across layers. Drag to rotate, scroll to zoom, shift-drag to pan; arrow keys and + / - also work."></canvas></div>
+          <div class="viewport"><canvas id="space3d" class="cv" tabindex="0" aria-label="3D view of token vectors across layers. Pointer drag rotates the view. Scroll zooms. Shift-drag pans. Arrow keys and plus or minus keys also adjust the view."></canvas></div>
           <div class="legend">
             <span><i style="background:var(--accent)"></i>followed token</span>
             <span><i style="background:var(--med)"></i>first token (attention sink)</span>
             <span><i style="background:var(--muted)"></i>other token</span>
             <span><i style="background:var(--ok)"></i>path of the followed token through the layers</span>
-            <span><i style="background:var(--accent)"></i>attention between a pair of tokens, brighter is stronger</span>
-            <span><i style="background:var(--fg)"></i>the pair followed on the Attention page, bolder and brighter is stronger</span>
+            <span><i style="background:var(--accent)"></i>attention between token pairs with brightness indicating strength</span>
+            <span><i style="background:var(--fg)"></i>pair selected in the Attention tab with width and brightness indicating strength</span>
           </div>
           <div class="controls">
             <div class="stack tight grow">
@@ -93,19 +93,19 @@
             <span class="lbl">Loading word space</span>
             <p id="idxText" class="muted small">Embedding words…</p>
             <div class="bar tall"><i id="idxFill" style="width:0%"></i></div>
-            <p class="note">Once per visit: the model's 49,152-token vocabulary is decoded and its embedding table is centered, so arithmetic results can be matched against every word. It takes a few seconds.</p>
+            <p class="note">Once per visit the model decodes the 49152 token vocabulary and centers the embedding table. Arithmetic results can then match against every vocabulary entry. This step takes several seconds.</p>
           </div>
           <div id="s7body" class="col" hidden>
-          <div class="viewport"><canvas id="wordSpace" class="cv" tabindex="0" aria-label="3D map of word embeddings. Drag to rotate, scroll to zoom, shift-drag to pan; arrow keys and + / - also work."></canvas></div>
+          <div class="viewport"><canvas id="wordSpace" class="cv" tabindex="0" aria-label="3D map of word embeddings. Pointer drag rotates the view. Scroll zooms. Shift-drag pans. Arrow keys and plus or minus keys also adjust the view."></canvas></div>
           <div class="controls">
             <div class="stack tight grow">
-              <label for="wordIn" class="lbl">Add your own word</label>
+              <label for="wordIn" class="lbl">Custom word</label>
               <div class="row"><input id="wordIn" class="text" type="text" autocomplete="off" placeholder="e.g. tiger"><button id="addWord" class="btn">Add</button></div>
             </div>
             <button id="reset7" class="btn">Reset view</button>
           </div>
           <div class="stack">
-            <label for="expr" class="lbl">Vector arithmetic &middot; add and subtract word vectors</label>
+            <label for="expr" class="lbl">Vector arithmetic &middot; addition and subtraction of word vectors</label>
             <div class="row"><input id="expr" class="text" type="text" autocomplete="off" value="king - man + woman" placeholder="e.g. king - man + woman"><button id="calc" class="btn pri">Calculate</button></div>
             <div id="examples" class="chips"></div>
           </div>
@@ -120,7 +120,7 @@
               <label for="gprompt" class="lbl">Prompt</label>
               <div class="row"><input id="gprompt" class="text" type="text" autocomplete="off" value="The cat sat on the mat because it"><button id="gstart" class="btn pri">Start</button></div>
             </div>
-            <div class="stack tight"><span class="lbl">Text so far &middot; one chip per token, generated ones in teal</span><div id="gtext" class="chips"></div></div>
+            <div class="stack tight"><span class="lbl">Text so far &middot; one chip per token with generated tokens in teal</span><div id="gtext" class="chips"></div></div>
             <div class="controls">
               <div class="stack tight grow">
                 <label for="gtemp" class="lbl">Temperature &middot; <span id="gtempText">1.0</span></label>
@@ -146,7 +146,7 @@
     </section>
   </div>
 
-  <p class="foot">Computed live in this page from the model's published weights, using transformers.js for tokenization.</p>
+  <p class="foot">Computed live in this page from published model weights using transformers.js for tokenization.</p>
 </main>
 </body>
 </html>

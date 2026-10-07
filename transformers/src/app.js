@@ -1,4 +1,4 @@
-// Transformer explorer: every number shown is computed live from SmolLM2-135M's published weights.
+// Transformer explorer: every number shown is computed live from SmolLM2-135M published weights.
 import { isCached, loadWeights, tokenize, piece } from './models.js';
 import { newState, step, trace, logitsOf, topK, sample } from './llama.js';
 import { pca3, cosine } from './pca.js';
@@ -7,15 +7,15 @@ import { createScene } from './space.js';
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const tick = () => new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = r; c.port2.postMessage(0); }); // yield to the UI; unlike setTimeout it is not throttled in background tabs
+const tick = () => new Promise((r) => { const c = new MessageChannel(); c.port1.onmessage = r; c.port2.postMessage(0); }); // Yields to UI without background tab throttling.
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const l2 = (a) => Math.sqrt(a.reduce((s, x) => s + x * x, 0));
 const unit = (a) => { const n = l2(a) || 1; return a.map((x) => x / n); };
 const row = (a, i, d) => a.subarray(i * d, (i + 1) * d);
-const vis = (p) => p.replace(/^ /, '␣').replace(/\n/g, '↵'); // make a leading space visible
+const vis = (p) => p.replace(/^ /, '␣').replace(/\n/g, '↵'); // Makes leading space visible.
 const dotv = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
 
-const BASE = [10, 13, 16], TEAL = [63, 197, 189], ORANGE = [255, 159, 69]; // rAIdteam accent and high
+const BASE = [10, 13, 16], TEAL = [63, 197, 189], ORANGE = [255, 159, 69]; // Theme accent and highlight colours.
 const C = { accent: '#3fc5bd', crit: '#ff6b63', high: '#ff9f45', med: '#e8c44a', low: '#7f8b95', ok: '#4fc98a', absent: '#b07a8a', fg: '#e8edf1', muted: '#98a4ae' };
 const mixv = (to, t) => BASE.map((x, i) => x + (to[i] - x) * t);
 const mix = (to, t) => `rgb(${mixv(to, t).map(Math.round)})`;
@@ -23,17 +23,17 @@ const mix = (to, t) => `rgb(${mixv(to, t).map(Math.round)})`;
 const WTE = 'model.embed_tokens.weight';
 let W, tr, pieces = [];
 let stage = 0, q = 1, layer = 12, head = 0, scaled = true, kj = null, astep = 0;
-const key = () => (kj != null && kj <= q ? kj : Math.max(0, q - 1)); // the key token of the followed pair: any token up to the query; by default the one just before it
+const key = () => (kj != null && kj <= q ? kj : Math.max(0, q - 1)); // Key token for the followed pair. Any token up to the query defaults to the preceding token.
 
 const STAGES = [
-  ['Embed', 'Text to vectors', 'The text is split into byte-pair tokens (a leading space belongs to the token, shown as ␣). Each token id looks up a 576-number vector in the embedding table, and that vector enters layer 1 as is. This model adds no position vector to the embedding; many others do, and the last section shows what that looks like and where this model puts position instead. One row per token, one column per dimension: teal is positive, orange is negative.'],
-  ['Attention', 'All heads in a layer, then one head', 'Each layer runs 9 heads in parallel and each learns its own pattern. To save memory, each group of 3 heads shares one set of keys and values (heads 0 to 2, 3 to 5, 6 to 8). The cards are every head\'s token-by-token attention matrix (rows look at columns); the outlined row is the token you follow. A token may only look at itself and earlier tokens, so everything above the diagonal is blocked. Click a card to open that head below. Below the cards, five steps follow the token you follow through the head you open: project, score, softmax, mix, combine.'],
-  ['Heads', 'What each head does', 'Measured on the sentence above: for every head in the model, how much attention goes to the previous token, the token itself and the first token, and how sharply it focuses. Pick a measure to colour the layer-by-head grid, then click a cell to inspect that head. These are properties of this sentence, not fixed roles: the same head can behave differently on other text.'],
-  ['Layer', 'Inside one layer, step by step', 'One layer applied to the token you follow, in order. Every layer has two halves, and each reads the token\'s vector and adds something to it: attention (gather from other tokens) and an MLP (process this token on its own). Before each half the vector is normalised (RMSNorm); after each half the result is added back (a residual), so nothing is overwritten and a token\'s vector changes gradually from layer to layer. The numbers are for the token and layer you picked above; pick another layer to compare, or click a layer in the table at the bottom.'],
-  ['Predict', 'Every token predicts the next one', 'The model\'s real job. At each position it scores all 49,152 tokens for what comes next, from only the tokens up to there. The first table compares those guesses with what you actually wrote. The second reads the followed token\'s guess off at every depth by applying the final normalisation and output matrix to every third layer\'s vector, so you can watch the prediction form.'],
-  ['Space', 'Tokens in 3D', 'The same tokens at every depth of the model, projected to 3 dimensions. Each vector is scaled to length 1 and each depth is centred on its own average, so the picture shows how the tokens relate to each other at that depth, not how far the whole sentence has travelled.'],
-  ['Words', 'Word map in 3D', 'Single words as the model first sees them: each word\'s row in the embedding table, centered on the vocabulary average, projected to 3 dimensions. Words that are several tokens long use the average of their tokens and carry an asterisk.'],
-  ['Generate', 'One new token at a time', 'Writing is the Predict stage on repeat: score the next token, choose one, append it, run again with one more token. Nothing else is happening when it writes a paragraph. Temperature flattens or sharpens the scores before choosing; top K cuts everything but the K likely tokens, so a wild low-probability pick becomes impossible.'],
+  ['Embed', 'Text to vectors', 'The text splits into byte-pair tokens. A leading space belongs to the token and appears as ␣. Each token id retrieves a 576-dimensional vector from the embedding table. That vector enters layer 1 directly. This model adds no position vector to the embedding. Other architectures add position vectors directly to embeddings. The final section demonstrates that approach and shows rotary position embeddings instead. Each row represents one token. Each column represents one dimension. Teal indicates positive values while orange indicates negative values.'],
+  ['Attention', 'All heads in a layer and head walkthrough', 'Each layer runs 9 heads in parallel and each learns distinct patterns. Groups of 3 heads share keys and values to reduce memory usage. Heads 0 through 2 share one set while heads 3 through 5 and heads 6 through 8 share the remaining sets. Each card displays one head token-by-token attention matrix where rows attend to columns. The outlined row indicates the followed token. Causal masking blocks positions above the diagonal because tokens only attend to preceding tokens and themselves. Selecting a card opens that head below. Five sequential steps process the followed token through the selected head: projection then scoring then softmax then mixing then output combination.'],
+  ['Heads', 'Measured behaviour of each head', 'Measurements reflect the sentence above across every head in the model. Metrics track attention allocated to the previous token and the token itself and the first token. Another metric measures attention focus sharpness. Selecting a metric colours the layer-by-head grid. Clicking a cell inspects that head. These measurements describe behaviour on this specific sentence rather than permanent roles. Heads vary behaviour across different texts.'],
+  ['Layer', 'Inside one layer step by step', 'One transformer layer applies sequentially to the followed token. Each layer contains two sub-blocks that read the vector and add updates to the residual stream. Attention gathers information from other tokens while the MLP processes the token independently. RMSNorm normalises the vector before each sub-block. Residual connections add each sub-block output back into the stream without overwriting previous values. The token vector therefore evolves gradually across depth. Displayed values correspond to the selected token and layer. The table at the bottom allows selecting other layers for comparison.'],
+  ['Predict', 'Next-token prediction at each position', 'The model assigns next-token scores across all 49152 vocabulary tokens at each position using only preceding tokens. The first table compares top model predictions against actual subsequent tokens in the text. The second table tracks prediction emergence across depth. It applies final RMSNorm and the unembedding matrix to vectors from every third layer.'],
+  ['Space', 'Token vectors in 3D', 'Token representations across model depths project into 3 dimensions. Each vector is normalised to unit length. Each depth level centers on its own mean vector. The visualisation displays relative token geometric relationships at each depth rather than global coordinate drift.'],
+  ['Words', 'Word embedding map in 3D', 'Isolated words appear as initial embedding representations. Each word embedding vector centers on the vocabulary mean and projects into 3 dimensions. Multi-token words average constituent token vectors and display an asterisk.'],
+  ['Generate', 'Autoregressive token generation', 'Text generation repeats next-token prediction in an autoregressive loop. The model scores candidate tokens then selects one and appends it to the context. Generation continues with the expanded sequence. Temperature scales logit distribution entropy before sampling. Top K truncation restricts sampling to the K highest-probability tokens and excludes low-probability candidates.'],
 ];
 const GROUPS = [
   ['animals', C.high, 'cat dog kitten puppy horse tiger lion fish'],
@@ -59,8 +59,8 @@ function stripCanvas(arr, n, d) {
   return c;
 }
 
-// arr is [n, d] row-major; labels[i] = [main, small]
-function strip(name, desc, arr, n, d, labels, on, rowH = 17, hue = C.accent, pick = null) { // pick(i): makes row label i a button
+// Array arr has dimensions n by d in row-major order. labels[i] holds [main small].
+function strip(name, desc, arr, n, d, labels, on, rowH = 17, hue = C.accent, pick = null) { // Parameter pick enables button interactions on row labels.
   const box = el('div', 'stack tight');
   box.append(el('div', 'controls', `<span class="step-name" style="color:${hue}">${name}</span><span class="muted small">${desc}</span>`));
   const s = el('div', 'strip'), l = el('div', 'strip-l');
@@ -85,7 +85,7 @@ function heat(at, n, onRow, onCell, onCol) {
   hd.append(el('div', 'rowbtn'));
   pieces.forEach((p, j) => {
     const c = el('button', 'hd', esc(vis(p)));
-    c.title = `key token ${vis(p)}`;
+    c.title = `Key token ${vis(p)}`;
     c.onclick = () => onCol(j);
     hd.append(c);
   });
@@ -120,12 +120,12 @@ function miniHeat(at, n, qrow) {
   return c;
 }
 
-const barRow = (label, val, text, on, w = 110, color = C.accent, pick = null) => { // pick: makes the whole row a button
+const barRow = (label, val, text, on, w = 110, color = C.accent, pick = null) => { // Parameter pick makes the row element a button.
   const r = el(pick ? 'button' : 'div', 'tr' + (on ? ' on' : ''), `<span class="mono" style="flex:0 0 ${w}px">${esc(label)}</span><div class="bar"><i style="width:${clamp(val, 0, 1) * 100}%;background:${color}"></i></div><span class="num">${text}</span>`);
   if (pick) r.onclick = pick;
   return r;
 };
-// the key token of the followed pair is chosen: the query moves later if it came before the key
+// Selecting the key token advances query position if query precedes key.
 const pickKey = (j) => { kj = j; q = Math.max(q, j); render(); };
 const pickQuery = (i) => { q = i; render(); };
 const pickHead = (h) => { head = h; render(); };
@@ -136,7 +136,7 @@ const sqrtDk = () => Math.sqrt(tr.d / tr.heads);
 function attnView(l, hd) {
   const L = tr.layers[l], n = tr.n;
   if (scaled) return { sc: L.scores[hd], at: L.attn[hd] };
-  const sc = L.scores[hd].map((x) => x * sqrtDk()), at = new Float32Array(n * n); // masked scores stay -Infinity
+  const sc = L.scores[hd].map((x) => x * sqrtDk()), at = new Float32Array(n * n); // Masked scores remain -Infinity.
   for (let i = 0; i < n; i++) {
     let m = -Infinity, s = 0;
     for (let j = 0; j <= i; j++) m = Math.max(m, sc[i * n + j]);
@@ -146,7 +146,7 @@ function attnView(l, hd) {
   return { sc, at };
 }
 
-// the vocabulary tokens whose embedding points most like this one (cosine over the whole table)
+// Finds vocabulary tokens with highest cosine similarity to target embedding.
 function nearTokens(id) {
   tr.nearTok ??= {};
   if (tr.nearTok[id]) return tr.nearTok[id];
@@ -160,11 +160,11 @@ function nearTokens(id) {
 }
 
 const POSITION = [
-  ['Original Transformer (2017)', 'a fixed sine and cosine vector for each position, added to the embedding before layer 1'],
-  ['GPT-2', 'a learned vector for each position (a second table, like the embedding table), added to the embedding before layer 1'],
-  ['BERT', 'a learned position vector (and a sentence-A/B vector) added to the embedding, then normalised'],
-  ['Llama, SmolLM2 (this model), Mistral, Qwen', 'nothing is added to the embedding; query and key are rotated by position inside every attention layer (RoPE)'],
-  ['T5, BLOOM, MPT', 'nothing is added to the embedding; attention scores get a bias that depends on the distance between two tokens'],
+  ['Original Transformer (2017)', 'Fixed sinusoidal vectors added to token embeddings before layer 1'],
+  ['GPT-2', 'Learned position vectors from a dedicated lookup table added to token embeddings before layer 1'],
+  ['BERT', 'Learned position and segment vectors added to token embeddings followed by normalisation'],
+  ['Llama and SmolLM2 and Mistral and Qwen', 'Rotary position embeddings (RoPE) applied to queries and keys inside every attention layer without modifying initial embeddings'],
+  ['T5 and BLOOM and MPT', 'Relative position biases added to attention scores without modifying initial embeddings'],
 ];
 
 function s1() {
@@ -179,11 +179,11 @@ function s1() {
   });
 
   const near = el('div', 'table'), mine = [...Array(n).keys()].filter((i) => i !== q).map((i) => [i, cosine(row(embed.word, q, d), row(embed.word, i, d))]).sort((x, y) => y[1] - x[1]).slice(0, 4);
-  near.append(el('div', 'tr th', `<span class="lbl">Tokens whose vector points most like ${tok}'s (cosine) · in this sentence, then in the whole vocabulary</span>`));
+  near.append(el('div', 'tr th', `<span class="lbl">Tokens with highest cosine similarity to ${tok} in this sentence and across the vocabulary</span>`));
   mine.forEach(([i, c]) => near.append(barRow(vis(pieces[i]), Math.max(0, c), c.toFixed(2), false, 110, C.accent, () => pickQuery(i))));
   nearTokens(tr.ids[q]).forEach(([id, c]) => near.append(barRow(vis(piece(id)), Math.max(0, c), c.toFixed(2), false, 110, C.accent)));
 
-  // illustration only: the classic sinusoidal position vector, as the original Transformer added it
+  // Illustration of sinusoidal position vectors from the original Transformer architecture.
   const sc = Math.sqrt(d), pe = new Float32Array(n * d);
   for (let p = 0; p < n; p++) for (let i = 0; i < d; i += 2) { const a = p / Math.pow(10000, i / d); pe[p * d + i] = Math.sin(a); pe[p * d + i + 1] = Math.cos(a); }
   const scaled = embed.word.map((x) => x * sc), summed = scaled.map((x, k) => x + pe[k]);
@@ -191,18 +191,18 @@ function s1() {
   POSITION.forEach(([m, how]) => pos.append(el('div', 'tr', `<span class="mono" style="flex:0 0 230px">${esc(m)}</span><span class="small" style="flex:1">${esc(how)}</span>`)));
 
   $('s1out').replaceChildren(
-    P(`The sentence is cut into <b>${n} tokens</b>. Each token is a number (its id); the id picks one row of the model's embedding table, which has one row for each of the ${(W[WTE].length / d).toLocaleString()} tokens in the vocabulary and ${d} numbers per row. Click a row to follow that token.`),
+    P(`The sentence splits into <b>${n} tokens</b>. Each token has a numeric id that indexes one row of the embedding table. The table contains ${(W[WTE].length / d).toLocaleString()} vocabulary rows and ${d} dimensions per row. Clicking any row selects that token for inspection.`),
     t,
-    P(`The rows below are those rows of the table, copied out. They are the same for a token wherever it appears and whatever surrounds it: this is the token on its own, before any context. Meaning is in the direction a vector points, which is why the tokens in the next table are the ones whose vectors point most like ${tok}'s.`),
-    strip('word', 'row of the embedding table for this token id: the input to layer 1', embed.word, n, d, lab, q, 17, C.accent, pickQuery),
+    P(`The rows below show table slices for these token ids. Slices remain identical across different contexts because embeddings represent tokens in isolation. Semantic similarity corresponds to vector direction. The subsequent table lists tokens whose embedding vectors exhibit the closest alignment with ${tok}.`),
+    strip('word', 'Embedding table row for this token id entering layer 1', embed.word, n, d, lab, q, 17, C.accent, pickQuery),
     near,
     el('span', 'lbl', 'Where does position go?'),
-    P('Attention on its own treats the tokens it can see as a set: it weighs each by its content, not by where it sits, so a token that sees "dog" and "man" cannot tell which came first. (The causal mask here gives each token a different set, the tokens before it, which leaks a little about position but not the order within the set.) So a model has to be told where each token is. This model does it inside attention. Many others do it right here, in the embedding, by adding a second vector to the token\'s vector:'),
+    P('Self-attention processes visible tokens as an unordered set based purely on content rather than position. A token attending to "dog" and "man" cannot determine token order from content alone. Causal masking restricts attention to preceding tokens without conveying relative order among them. Models therefore require explicit position information. SmolLM2 injects position information inside attention layers. Other architectures inject position information directly into embeddings by adding dedicated position vectors:'),
     pos,
-    P(`Below is what the first kind looks like for this sentence. It is an illustration, not part of this model: the classic sine and cosine position vectors, computed live, added to the embeddings above (the embeddings scaled by √d = ${sc}, as in the original paper; typical size of a number is then ${rms(scaled).toFixed(2)} for the tokens and ${rms(pe).toFixed(2)} for the positions). Fast waves in the first dimensions, slow waves later, so every position gets its own pattern.`),
-    strip('position', 'one fixed vector per position 0, 1, 2…, the same for any text', pe, n, d, lab, q, 17, C.high, pickQuery),
-    strip('token + position', `what such a model would send into layer 1; ${tok} here is ${cosine(row(scaled, q, d), row(summed, q, d)).toFixed(2)} cosine from its plain embedding`, summed, n, d, lab, q, 17, C.ok, pickQuery),
-    el('p', 'note', 'With position added, the same word at two places in a text would enter layer 1 as two different vectors. Here it enters as one vector, and attention tells the two places apart by rotating queries and keys (see the Attention stage).'),
+    P(`The visualisation below demonstrates sinusoidal position encoding for this sentence. This synthetic example does not form part of SmolLM2. Sinusoidal vectors are computed live and added to token embeddings scaled by &radic;d = ${sc}. The typical entry magnitude is ${rms(scaled).toFixed(2)} for embeddings and ${rms(pe).toFixed(2)} for position vectors. High frequencies occupy early dimensions while low frequencies occupy later dimensions to produce unique patterns per position.`),
+    strip('position', 'Fixed sinusoidal vectors per position across arbitrary text', pe, n, d, lab, q, 17, C.high, pickQuery),
+    strip('token + position', `Combined input vector entering layer 1 with cosine similarity ${cosine(row(scaled, q, d), row(summed, q, d)).toFixed(2)} to plain embedding for ${tok}`, summed, n, d, lab, q, 17, C.ok, pickQuery),
+    el('p', 'note', 'Adding position vectors produces distinct inputs for identical words at different positions. SmolLM2 inputs identical embedding vectors and distinguishes positions through rotary query and key transformations in attention layers.'),
   );
 }
 
@@ -221,8 +221,8 @@ function headCards() {
 
 // ---------- attention one step at a time: the followed token, one head ----------
 const ASTEPS = ['Project', 'Score', 'Softmax', 'Mix', 'Combine'];
-const cols = (a, w, c0, len, rows) => { const o = new Float32Array(rows * len); for (let i = 0; i < rows; i++) o.set(a.subarray(i * w + c0, i * w + c0 + len), i * len); return o; }; // columns c0..c0+len of the first `rows` rows of an [n, w] array
-const sbar = (v, mx) => `<div class="bar"><i style="width:${Math.abs(v) / mx * 100}%;background:${v < 0 ? C.high : C.accent}"></i></div>`; // teal positive, orange negative
+const cols = (a, w, c0, len, rows) => { const o = new Float32Array(rows * len); for (let i = 0; i < rows; i++) o.set(a.subarray(i * w + c0, i * w + c0 + len), i * len); return o; }; // Extracts column slices across rows of an n by w array.
+const sbar = (v, mx) => `<div class="bar"><i style="width:${Math.abs(v) / mx * 100}%;background:${v < 0 ? C.high : C.accent}"></i></div>`; // Teal indicates positive and orange indicates negative.
 
 function attnSteps() {
   const { n, d, heads, kv } = tr, dh = d / heads, g = Math.floor(head / (heads / kv)) * dh, m = q + 1, kw = kv * dh, k = sqrtDk();
@@ -231,31 +231,31 @@ function attnSteps() {
   const qv = row(L.q, q, d).subarray(head * dh, (head + 1) * dh), K = cols(L.k, kw, g, dh, m), V = cols(L.v, kw, g, dh, m);
   const w = row(at, q, n).subarray(0, m), score = Array.from(sc.subarray(q * n, q * n + m)), raw = Array.from(L.scores[head].subarray(q * n, q * n + m), (x) => x * k);
   const grp = g / dh, p = (html) => el('p', 'small', html), th = (...c) => el('div', 'tr th', c.join(''));
-  const keyRow = (j, html) => { const b = el('button', 'tr' + (j === key() ? ' on' : '') + (j > q ? ' faint' : ''), html); b.onclick = () => pickKey(j); return b; }; // a key-token row: click to follow that key (a later token also moves the query to it)
+  const keyRow = (j, html) => { const b = el('button', 'tr' + (j === key() ? ' on' : '') + (j > q ? ' faint' : ''), html); b.onclick = () => pickKey(j); return b; }; // Key token row where selection focuses that key.
   const blocked = () => Array.from({ length: n - m }, (_, i) => keyRow(m + i, `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[m + i]))}</span><span class="num">blocked</span>`));
   const t = el('div', 'table'), body = [];
   if (astep === 0) {
     body.push(
-      p(`Each token's normalised vector (RMSNorm 1) is multiplied by three learned matrices. The <span class="step-name">query</span> says what a token is looking for, the <span class="step-name">key</span> what a token offers to be found by, the <span class="step-name">value</span> what it hands over once found. Head ${head} has its own 64-number query; its keys and values come from group ${grp}, shared with heads ${grp * 3} to ${grp * 3 + 2}. Query and key are rotated by an angle that grows with the token's position, so a score will depend on how far apart two tokens are.`),
-      strip('RMSNorm 1', `${tok}'s vector: the input to all three matrices`, row(L.ln1, q, d), 1, d, me, -1, 22, C.muted),
-      strip('query', `${tok}'s 64 numbers in head ${head}, after rotation`, qv, 1, dh, me, -1, 22, C.accent),
-      strip('keys', `one row for ${tok} and each token before it, rotated by its own position`, K, m, dh, lab, key(), 17, C.accent, pickKey),
-      strip('values', 'what each of those tokens passes on', V, m, dh, lab, key(), 17, C.ok, pickKey));
+      p(`Three learned projection matrices multiply each normalised token vector from RMSNorm 1. The <span class="step-name">query</span> represents desired information. The <span class="step-name">key</span> represents indexing features. The <span class="step-name">value</span> represents content payload. Head ${head} projects its own 64-dimensional query vector. Group ${grp} supplies shared keys and values for heads ${grp * 3} through ${grp * 3 + 2}. Rotary transformations rotate queries and keys by angles proportional to token position so attention scores reflect relative token distance.`),
+      strip('RMSNorm 1', `Normalised vector for ${tok} entering projection matrices`, row(L.ln1, q, d), 1, d, me, -1, 22, C.muted),
+      strip('query', `Rotated 64-dimensional query vector for ${tok} in head ${head}`, qv, 1, dh, me, -1, 22, C.accent),
+      strip('keys', `Rotated key vectors for ${tok} and preceding tokens`, K, m, dh, lab, key(), 17, C.accent, pickKey),
+      strip('values', 'Value vectors passed from visible tokens', V, m, dh, lab, key(), 17, C.ok, pickKey));
   } else if (astep === 1) {
     t.append(th(`<span class="lbl" style="flex:0 0 110px">key token</span>`, `<span class="lbl num">query · key</span>`, `<span class="lbl" style="flex:1">${scaled ? `÷ √d<sub>k</sub> = score` : 'score'}</span>`, `<span class="lbl num">score</span>`));
     raw.forEach((r, j) => t.append(keyRow(j,  `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[j]))}</span><span class="num">${r.toFixed(2)}</span>${sbar(score[j], Math.max(...score.map(Math.abs)) || 1)}<span class="num">${score[j].toFixed(2)}</span>`)));
     blocked().forEach((r) => t.append(r));
     body.push(
-      p(`The query of ${tok} is compared with the key of every token it may read: multiply the 64 numbers pairwise and add them up. A large positive sum means the key matches what the query is looking for (teal); negative means it does not (orange). Later tokens are blocked: they have not been written yet.`),
+      p(`The query vector for ${tok} computes dot products against keys of visible tokens. Pairwise products across 64 dimensions sum to raw scores. Large positive sums indicate strong alignment (teal). Negative sums indicate opposing alignment (orange). Causal masking blocks future tokens.`),
       t,
-      el('p', 'note', scaled ? `Each sum is divided by √d<sub>k</sub> = √${dh} = ${k} so the scores stay small. Untick the box above to see why.` : `Without the division, sums over ${dh} dimensions are about ${k}× larger, the softmax in the next step saturates, and each token puts nearly all its weight on one other token.`));
+      el('p', 'note', scaled ? `Dividing dot products by &radic;d<sub>k</sub> = &radic;${dh} = ${k} prevents score variance growth.` : `Without scaling by &radic;d<sub>k</sub> sums over ${dh} dimensions expand by a factor of ${k}. Softmax saturation then concentrates almost all attention weight onto a single token.`));
   } else if (astep === 2) {
     const mx = Math.max(...score), ex = score.map((x) => Math.exp(x - mx)), sum = ex.reduce((x, y) => x + y, 0);
     t.append(th(`<span class="lbl" style="flex:0 0 110px">key token</span>`, `<span class="lbl num">score</span>`, `<span class="lbl num">e<sup>score − max</sup></span>`, `<span class="lbl" style="flex:1">weight = that ÷ ${sum.toFixed(2)}</span>`, `<span class="lbl num">weight</span>`));
     ex.forEach((e, j) => t.append(keyRow(j,  `<span class="mono" style="flex:0 0 110px">${esc(vis(pieces[j]))}</span><span class="num">${score[j].toFixed(2)}</span><span class="num">${e.toFixed(3)}</span><div class="bar"><i style="width:${w[j] * 100}%"></i></div><span class="num">${w[j].toFixed(2)}</span>`)));
     blocked().forEach((r) => t.append(r));
     body.push(
-      p(`Softmax turns the scores into weights: raise e to each score (after subtracting the biggest, so nothing overflows), then divide by the total so the weights add up to 1. The best-matching token gets the most weight, but every visible token keeps some.`),
+      p(`Softmax normalises attention scores into probability weights. Subtracting the maximum score prevents numerical overflow before exponentiation. Exponentiated scores divided by their sum yield weights totaling 1. Best matching tokens receive highest weights while all visible tokens retain non-zero probability.`),
       t,
       el('p', 'note', `The weights add up to ${w.reduce((x, y) => x + y, 0).toFixed(3)}. This is the row of the matrix below that has the outline.`));
   } else if (astep === 3) {
@@ -263,17 +263,17 @@ function attnSteps() {
     for (let j = 0; j < m; j++) for (let c = 0; c < dh; c++) { wv[j * dh + c] = w[j] * V[j * dh + c]; out[c] += wv[j * dh + c]; }
     const own = row(L.ctx, q, d).subarray(head * dh, (head + 1) * dh), err = Math.max(...out.map((x, c) => Math.abs(x - own[c])));
     body.push(
-      p(`Each token's value is multiplied by its weight, so a token that got a weight of 0.01 contributes almost nothing (dark rows). Adding the rows up gives this head's output for ${tok}: a blend of what the tokens it attends to have to offer.`),
-      strip('weight × value', 'the value rows from step 1, each scaled by its weight', wv, m, dh, lab, key(), 17, C.ok, pickKey),
-      strip('head output', `the sum of the rows above: ${tok}'s 64 numbers from head ${head}`, out, 1, dh, me, -1, 22, C.accent),
+      p(`Attention weights scale corresponding value vectors so low weights contribute minimal activation. The sum across weighted value vectors produces the head output for ${tok} as an aggregated representation across attended tokens.`),
+      strip('weight × value', 'Value vectors scaled by attention weights', wv, m, dh, lab, key(), 17, C.ok, pickKey),
+      strip('head output', `Sum of weighted value vectors yielding 64 dimensions for ${tok} in head ${head}`, out, 1, dh, me, -1, 22, C.accent),
       el('p', 'note', `Largest difference from the head output the model computed: ${err.toExponential(1)}.`));
   } else {
-    const open = el('button', 'btn', 'Open the Layer stage');
+    const open = el('button', 'btn', 'Open Layer stage');
     open.onclick = () => { stage = 3; render(); };
     body.push(
-      p(`All ${heads} heads do this at the same time, each with its own query, keys and weights, and each ends with 64 numbers. Side by side they form the ${d}-number attention context (one row per head; the head you opened is outlined). A learned output matrix mixes the heads together, and that result is added to ${tok}'s vector.`),
-      strip('all heads', `${tok}'s ${heads} head outputs side by side = attention context`, row(L.ctx, q, d), heads, dh, Array.from({ length: heads }, (_, h) => ['head ' + h]), head, 22, C.accent, pickHead),
-      strip('attention output', 'the heads mixed by the output matrix', row(L.attnOut, q, d), 1, d, me, -1, 22, C.accent),
+      p(`All ${heads} heads execute concurrently with separate query and key and value projections. Each head produces a 64-dimensional output vector. Concatenation forms the ${d}-dimensional attention context vector with one row per head. A learned output projection matrix mixes information across all heads and projects an update to add to the residual stream for ${tok}.`),
+      strip('all heads', `Concatenated ${heads} head outputs forming attention context for ${tok}`, row(L.ctx, q, d), heads, dh, Array.from({ length: heads }, (_, h) => ['head ' + h]), head, 22, C.accent, pickHead),
+      strip('attention output', 'Attention context projected through the output matrix', row(L.attnOut, q, d), 1, d, me, -1, 22, C.accent),
       el('div', 'row').appendChild(open).parentElement);
   }
   const tabs = el('div', 'chips');
@@ -298,13 +298,13 @@ function s2() {
     el('span', 'lbl', `Layer ${layer} · all ${tr.heads} heads · colour = which heads share keys and values`),
     headCards(),
     attnSteps(),
-    el('span', 'lbl', 'Every token as the query (click a row label to follow it, or a cell to follow that pair)'),
+    el('span', 'lbl', 'Full attention matrix across tokens (row selection focuses query while cell selection focuses pair)'),
     heat(at, n, (i) => { q = i; render(); }, (i, j) => { q = i; kj = j; render(); }, pickKey),
     pairPanel(),
   );
 }
 
-// one pair of tokens (query reads from key), followed through every layer and head
+// Query and key token pair tracked across all layers and heads.
 function pairPanel() {
   const n = tr.n, i = q, j = key(), box = el('div', 'col');
   const pick = el('div', 'chips');
@@ -327,7 +327,7 @@ function pairPanel() {
       const c = el('button', 'hc' + (l + 1 === layer && h === head ? ' on' : ''), v >= 0.005 ? (v > 0.995 ? '1' : v.toFixed(2).replace(/^0/, '')) : '');
       c.style.background = mix(h === vals.length ? ORANGE : TEAL, Math.sqrt(clamp(v, 0, 1)));
       c.style.color = v > 0.3 ? '#0a0d10' : 'var(--fg)';
-      c.title = `layer ${l + 1}, ${h === vals.length ? 'mean of heads' : 'head ' + h}: ${v.toFixed(3)}`;
+      c.title = `layer ${l + 1} ${h === vals.length ? 'mean of heads' : 'head ' + h}: ${v.toFixed(3)}`;
       c.onclick = () => { layer = l + 1; if (h < vals.length) head = h; render(); };
       r.append(c);
     });
@@ -335,21 +335,21 @@ function pairPanel() {
   }
   const wrap = el('div', 'scroll'); wrap.append(g);
   box.append(
-    el('span', 'lbl', 'Follow one pair through the whole model'),
-    el('p', 'small', `How much <span class="step-name">${esc(vis(pieces[i]))}</span> (the query, chosen above) reads from <span class="step-name">${esc(vis(pieces[j]))}</span> in every layer and head. Pick the other token of the pair:`),
+    el('span', 'lbl', 'Tracking one pair across all layers'),
+    el('p', 'small', `Attention weights between query token <span class="step-name">${esc(vis(pieces[i]))}</span> and key token <span class="step-name">${esc(vis(pieces[j]))}</span> across every layer and head. Token selector for key position:`),
     pick, wrap,
-    el('p', 'note', 'The same pair is drawn in white in the 3D view, where every pair of tokens is a line and brighter means more attention at that depth.'),
+    el('p', 'note', 'This pair appears in white in the 3D view. Attention edges connect tokens with brightness reflecting attention weight at selected depth.'),
   );
   return box;
 }
 
-// ---------- heads: what each head does, measured on this sentence ----------
+// Head behaviour metrics measured on this sentence.
 const METRICS = [
-  ['prev', 'previous token', 'mean weight each token puts on the token just before it'],
-  ['self', 'itself', 'mean weight each token puts on itself'],
-  ['first', 'first token', 'mean weight on the very first token, where heads often park attention when nothing else is relevant'],
-  ['focus', 'focus', '1 means each token looks at one token, 0 means it spreads evenly over everything it can see'],
-  ['reach', 'reach', 'mean distance to the tokens attended to, as a share of how far back each token could look'],
+  ['prev', 'previous token', 'Mean weight allocated to the immediately preceding token'],
+  ['self', 'itself', 'Mean weight allocated to the token itself'],
+  ['first', 'first token', 'Mean weight allocated to the initial sequence token as an attention sink'],
+  ['focus', 'focus', 'Entropy score where 1 indicates concentration on one token and 0 indicates uniform spread'],
+  ['reach', 'reach', 'Mean distance to attended tokens relative to available context window'],
 ];
 let metric = 'prev';
 
@@ -358,7 +358,7 @@ function headStats(l, hd) {
   tr.stats ??= {};
   if (tr.stats[key]) return tr.stats[key];
   const n = tr.n, at = tr.layers[l].attn[hd], m = { prev: 0, self: 0, first: 0, focus: 0, reach: 0 };
-  for (let i = 1; i < n; i++) { // row 0 can only see itself, so it says nothing about the head
+  for (let i = 1; i < n; i++) { // Row 0 attends only to itself and provides no discriminative metric signal.
     let ent = 0, reach = 0;
     for (let j = 0; j <= i; j++) {
       const w = at[i * n + j];
@@ -370,7 +370,7 @@ function headStats(l, hd) {
   }
   for (const k of Object.keys(m)) m[k] /= Math.max(1, n - 1);
   const top = [['previous-token head', m.prev], ['self head', m.self]].sort((a, b) => b[1] - a[1])[0];
-  m.tag = m.first >= 0.5 ? 'first-token sink' : top[1] >= 0.4 ? top[0] : m.focus >= 0.45 ? 'focused on specific tokens' : 'broad, mixed';
+  m.tag = m.first >= 0.5 ? 'first-token sink' : top[1] >= 0.4 ? top[0] : m.focus >= 0.45 ? 'focused on specific tokens' : 'broad and mixed';
   return (tr.stats[key] = m);
 }
 
@@ -395,7 +395,7 @@ function s3() {
       const v = headStats(l, h)[metric], c = el('button', 'hc' + (l + 1 === layer && h === head ? ' on' : ''), v.toFixed(2).replace(/^0/, ''));
       c.style.background = mix(TEAL, Math.sqrt(clamp(v, 0, 1)));
       c.style.color = v > 0.3 ? '#0a0d10' : 'var(--fg)';
-      c.title = `layer ${l + 1}, head ${h}: ${v.toFixed(3)}`;
+      c.title = `layer ${l + 1} head ${h}: ${v.toFixed(3)}`;
       c.onclick = () => { layer = l + 1; head = h; render(); };
       r.append(c);
     }
@@ -403,7 +403,7 @@ function s3() {
   }
   const wrap = el('div', 'scroll'); wrap.append(g);
 
-  // detail for the selected head
+  // Detail for the selected head.
   const st = headStats(layer - 1, head), at = tr.layers[layer - 1].attn[head];
   const prof = el('div', 'table');
   prof.append(el('div', 'tr th', `<span class="lbl">Layer ${layer} · head ${head}: ${esc(st.tag)}</span>`));
@@ -419,7 +419,7 @@ function s3() {
   out.replaceChildren(
     el('div', 'stack tight', `<span class="lbl">Colour by</span>`),
     mk,
-    el('p', 'note', `${esc(label)}: ${esc(hint)}. Even attention over everything visible would give a token only 1 / (its position + 1), so anything near or above 0.4 is a clear habit.`),
+    el('p', 'note', `${esc(label)}: ${esc(hint)}. Uniform attention across all visible tokens assigns weight 1 / (position + 1). Values approaching or exceeding 0.4 indicate strong systematic preference.`),
     wrap,
     prof,
     links,
@@ -439,11 +439,11 @@ function s4() {
     box.append(el('span', 'note', `length ${l2(v).toFixed(2)}${note ? ' · ' + note : ''}`));
     return box;
   };
-  const norm = (v) => `typical size of a number ${rms(inp).toFixed(2)} before, ${rms(v).toFixed(2)} after`;
+  const norm = (v) => `Root mean square entry magnitude: ${rms(inp).toFixed(2)} before and ${rms(v).toFixed(2)} after`;
 
   const hl = Array.from({ length: heads }, (_, h) => l2(r(L.ctx).subarray(h * dh, (h + 1) * dh))), hmx = Math.max(...hl) || 1;
   const contrib = el('div', 'table');
-  contrib.append(el('div', 'tr th', '<span class="lbl">Length of each head\'s output · click one to open it in Attention</span>'));
+  contrib.append(el('div', 'tr th', '<span class="lbl">Head output vector lengths · selection opens head in Attention</span>'));
   hl.forEach((v, h) => {
     contrib.append(barRow(`head ${h}`, v / hmx, v.toFixed(2), h === head, 110, C.accent, () => { head = h; stage = 1; render(); }));
   });
@@ -453,7 +453,7 @@ function s4() {
 
   const ratio = (v) => l2(v) / l2(inp);
   const sum = el('div', 'table');
-  sum.append(el('div', 'tr th', `<span class="lbl">Size of each update, as a share of the length of the token's vector going in</span>`));
+  sum.append(el('div', 'tr th', `<span class="lbl">Magnitude of each update relative to incoming token vector length</span>`));
   sum.append(barRow('attention', ratio(r(L.attnOut)), share(r(L.attnOut)), false, 110, C.accent));
   sum.append(barRow('MLP', ratio(r(L.ffOut)), share(r(L.ffOut)), false, 110, C.high));
 
@@ -467,29 +467,29 @@ function s4() {
   });
 
   $('s4out').replaceChildren(
-    P(`Layer ${layer}, following <span class="step-name">${tok}</span>. Each step shows the token's vector as a strip of ${d} numbers (teal positive, orange negative), with what happens to it and why.`),
+    P(`Layer ${layer} inspection for <span class="step-name">${tok}</span>. Each step renders the ${d}-dimensional token vector where teal indicates positive values and orange indicates negative values.`),
     el('div', 'legend', `<span><i style="background:${C.fg}"></i>token vector</span><span><i style="background:${C.accent}"></i>attention</span><span><i style="background:${C.ok}"></i>residual add</span><span><i style="background:${C.high}"></i>MLP</span><span><i style="background:${C.muted}"></i>RMSNorm</span>`),
 
-    block('Half 1 · attention: gather from other tokens', `The token reads the tokens before it and collects what is relevant. This half is what the Attention page walks through in detail.`),
-    stp('input', `The vector for ${tok} so far. It is called the residual stream: every layer reads it and adds to it, and none replaces it. In layer 1 it is the token's embedding; in later layers it also holds everything earlier layers wrote.`, 'the token\'s vector coming into this layer', inp, C.fg),
-    stp('RMSNorm 1', `Attention does not read the stream directly. The vector is divided by its own typical size (root mean square), so it no longer matters how large the stream has grown, then multiplied by a learned number per dimension that sets the scale attention expects.`, 'normalised before attention reads it', r(L.ln1), C.muted, norm(r(L.ln1))),
-    stp('attention context', `All ${heads} heads read the normalised vectors of the tokens before this one and each mixes their values into ${dh} numbers (the five steps on the Attention page). One row per head, side by side.`, `${heads} heads × ${dh} numbers: each head's weighted mix of values`, r(L.ctx), C.accent, '', heads, Array.from({ length: heads }, (_, h) => ['head ' + h]), pickHead),
+    block('Half 1 · attention: gather from other tokens', 'The token attends to preceding tokens and aggregates relevant representations. The Attention stage details this mechanism.'),
+    stp('input', `Incoming vector for ${tok} in the residual stream. Every layer reads from this stream and accumulates additive updates without overwriting previous activations. Layer 1 receives raw embeddings while later layers accumulate representations from preceding layers.`, 'Token vector entering this layer', inp, C.fg),
+    stp('RMSNorm 1', 'Attention reads normalised representations rather than raw residual vectors. The vector divides by its root mean square magnitude to eliminate scale drift. Learned scaling weights then calibrate variance across dimensions for attention operations.', 'Normalised vector before attention input', r(L.ln1), C.muted, norm(r(L.ln1))),
+    stp('attention context', `All ${heads} heads process normalised vectors from preceding tokens. Each head aggregates value vectors into ${dh} dimensions. Rows display individual head outputs side by side.`, `${heads} heads × ${dh} dimensions representing weighted value mixtures per head`, r(L.ctx), C.accent, '', heads, Array.from({ length: heads }, (_, h) => ['head ' + h]), pickHead),
     contrib,
     el('p', 'note', 'A long output is not the same as a big influence: the next step can amplify or mute any head.'),
-    stp('attention output', `A learned ${d}×${d} matrix (the output projection) mixes the ${heads} heads' results into one vector shaped like the token's vector. This is the update attention proposes.`, 'context mixed by the output matrix', r(L.attnOut), C.accent, `adds ${share(r(L.attnOut))} of the input's length`),
-    stp('+ residual', 'The update is added to the input number by number. The token keeps what it had and gains what attention found.', 'input + attention output', r(L.resAttn), C.ok, cos(r(L.resAttn))),
+    stp('attention output', `A learned ${d}×${d} output projection matrix mixes representations across all ${heads} heads into a single ${d}-dimensional update vector.`, 'Attention context projected through the output matrix', r(L.attnOut), C.accent, `Update adds ${share(r(L.attnOut))} of incoming vector length`),
+    stp('+ residual', 'The update adds elementwise into the residual stream. Previous activations remain intact alongside new attention updates.', 'Input plus attention output', r(L.resAttn), C.ok, cos(r(L.resAttn))),
 
-    block('Half 2 · MLP: process the token on its own', `No other tokens are involved here. The same small network is applied to every token separately: widen the vector to ${ffD} numbers, switch some of them on and others off, then squeeze back to ${d}. Much of what the model knows as facts and habits is thought to live in these weights.`),
-    stp('RMSNorm 2', 'The same rescaling again, with its own learned numbers, before the MLP reads the vector.', 'normalised before the MLP reads it', r(L.ln2), C.muted, norm(r(L.ln2))),
-    stp('MLP gate', `Two separate matrices widen the vector to ${ffD} numbers. This one is the gate. It is passed through SiLU, which is close to 0 when the number is negative and close to the number itself when positive, so it acts as a volume knob for each of the ${ffD} features.`, `${ffD} numbers, before SiLU`, gate, C.high, `${open} of ${ffD} gates are positive (open)`),
-    stp('MLP up', 'The other matrix: the content of each feature, before the gate decides how much of it passes.', `${ffD} numbers`, r(L.up, ffD), C.high),
-    stp('MLP hidden', 'Each feature is gate × up, with SiLU applied to the gate. A feature whose gate is shut contributes almost nothing, so only a few features really speak for this token.', `${ffD} numbers: SiLU(gate) × up`, hid, C.high, `the strongest ${top} features (10%) hold ${(topShare * 100).toFixed(0)}% of the total squared size`),
-    stp('MLP output', `A learned ${ffD}→${d} matrix (the down projection) turns the active features back into a vector shaped like the token's vector: the update the MLP proposes.`, `projected back to ${d}`, r(L.ffOut), C.high, `adds ${share(r(L.ffOut))} of the input's length`),
-    stp('+ residual = layer output', 'The MLP update is added to the vector from step 5. The result leaves this layer and is the input of the next one.', 'previous residual + MLP output', r(L.out), C.ok, cos(r(L.out))),
+    block('Half 2 · MLP: process the token on its own', `The feed-forward network processes each token independently without cross-token interaction. The layer expands the vector to ${ffD} dimensions and applies non-linear gating before projecting back to ${d} dimensions. Parametric memory and factual associations reside primarily in these weights.`),
+    stp('RMSNorm 2', 'Root mean square normalisation applies again with independent learned scaling parameters before the MLP sub-block.', 'Normalised vector before MLP input', r(L.ln2), C.muted, norm(r(L.ln2))),
+    stp('MLP gate', `Two projection matrices expand the normalised vector to ${ffD} dimensions. The gate projection passes through SiLU activation. Values approach zero for negative activations and linear scaling for positive activations to regulate feature transmission.`, `${ffD} dimensions before SiLU activation`, gate, C.high, `${open} of ${ffD} gates positive (open)`),
+    stp('MLP up', 'The up projection produces feature content prior to gate modulation.', `${ffD} dimensions`, r(L.up, ffD), C.high),
+    stp('MLP hidden', 'Elementwise multiplication combines SiLU gate activations with up projections. Inactive gates suppress feature values so a subset of features dominates the token representation.', `${ffD} dimensions: SiLU(gate) × up`, hid, C.high, `Top ${top} features (10%) account for ${(topShare * 100).toFixed(0)}% of squared norm`),
+    stp('MLP output', `A learned down projection matrix maps ${ffD} dimensions back into ${d} dimensions to form the MLP residual update.`, `Projected back to ${d} dimensions`, r(L.ffOut), C.high, `Update adds ${share(r(L.ffOut))} of incoming vector length`),
+    stp('+ residual = layer output', 'The MLP update adds into the intermediate residual stream from step 5. The resulting vector forms the output of this layer and the input to the subsequent layer.', 'Intermediate residual stream plus MLP output', r(L.out), C.ok, cos(r(L.out))),
 
-    block('This layer in summary', `The token's vector changed by an attention update and an MLP update. In most layers each update is a fraction of the vector's length, which is why the vector drifts rather than jumps from layer to layer.`),
+    block('This layer in summary', 'The token vector incorporates an attention update and an MLP update. Updates typically constitute a moderate fraction of total vector norm to ensure smooth geometric trajectory across layers.'),
     sum,
-    block('Every layer for this token', 'The same two updates in every layer. Click a layer to look inside it. The vector keeps growing, since layers only add to it. For this token the middle layers add a steady fraction of its length, while the first and last layers change it most (a bar is full at 100%; the number shows the true share).'),
+    block('Every layer for this token', 'Every layer applies this dual update sequence. Selecting any layer displays its internal activations. Additive residual accumulation increases vector magnitude across depth. Middle layers contribute steady fractional updates while boundary layers induce larger relative shifts. Bars reach maximum visual width at 100% while numeric labels report exact proportions.'),
     all,
   );
 }
@@ -509,7 +509,7 @@ async function s5() {
     }
   }
   const t = el('div', 'table');
-  t.append(el('div', 'tr th', `<span class="lbl" style="flex:0 0 100px">token</span><span class="lbl" style="flex:0 0 100px">you wrote next</span><span class="lbl" style="flex:1">probability the model gave it</span><span class="lbl" style="flex:0 0 190px">its top guess</span>`));
+  t.append(el('div', 'tr th', `<span class="lbl" style="flex:0 0 100px">token</span><span class="lbl" style="flex:0 0 100px">actual next token</span><span class="lbl" style="flex:1">model probability</span><span class="lbl" style="flex:0 0 190px">top prediction</span>`));
   for (let i = 0; i < n; i++) {
     const pr = tr.pred[i], g1 = pr.top[0], nxt = tr.ids[i + 1], pa = nxt == null ? null : pr.probs[nxt] / pr.sum;
     const b = el('button', 'tr' + (i === q ? ' on' : ''), `<span class="mono" style="flex:0 0 100px">${esc(vis(pieces[i]))}</span><span class="mono" style="flex:0 0 100px">${nxt == null ? '–' : esc(vis(pieces[i + 1]))}</span><div class="bar"><i style="width:${(pa ?? 0) * 100}%;background:${nxt != null && nxt === g1.id ? C.ok : C.accent}"></i></div><span class="num">${pa == null ? '' : (pa * 100).toFixed(1) + '%'}</span><span class="mono" style="flex:0 0 190px">${esc(vis(piece(g1.id)))} ${(g1.p * 100).toFixed(0)}%</span>`);
@@ -517,26 +517,26 @@ async function s5() {
     t.append(b);
   }
   out.replaceChildren(
-    el('p', 'small', 'Each row sees only its own token and the ones before it. Green means the model\'s top guess is exactly what you wrote.'),
+    el('p', 'small', 'Each position accesses only preceding context. Green indicates agreement between top model prediction and actual subsequent text.'),
     t,
-    el('p', 'muted small', `Reading the guess for <span class="step-name">${esc(vis(pieces[q]))}</span> at every depth…`),
+    el('p', 'muted small', `Evaluating predictions for <span class="step-name">${esc(vis(pieces[q]))}</span> across depth…`),
   );
 
-  // logit lens for the followed token
+  // Logit lens for followed token across depth.
   tr.lens ??= {};
   if (!tr.lens[q]) {
-    const got = []; // cached only once complete, so an interrupted render never leaves a partial table
+    const got = []; // Cached only once complete to prevent partial renders.
     for (const S of states().filter((_, i) => i % 3 === 0)) { got.push(topK(logitsOf(W, row(S, q, d)), 3)); await tick(); if (stage !== 4 || q !== myQ) return; }
     tr.lens[q] = got;
   }
   if (stage !== 4 || q !== myQ) return;
   const nxt = tr.ids[q + 1], lt = el('div', 'table');
-  lt.append(el('div', 'tr th', `<span class="lbl">After <b>${esc(vis(pieces[q]))}</b> · top 3 guesses read off at each depth${nxt == null ? '' : ` · you wrote “${esc(vis(pieces[q + 1]))}”`}</span>`));
+  lt.append(el('div', 'tr th', `<span class="lbl">Following <b>${esc(vis(pieces[q]))}</b> · top 3 predictions across depth${nxt == null ? '' : ` · subsequent token “${esc(vis(pieces[q + 1]))}”`}</span>`));
   tr.lens[q].forEach((tk, s) => {
     const cells = tk.top.map((x, k) => `<span class="mono" style="flex:1;${k === 0 ? `color:${x.id === nxt ? C.ok : C.accent}` : ''}">${esc(vis(piece(x.id)))} <span class="faint">${(x.p * 100).toFixed(0)}%</span></span>`).join('');
     lt.append(el('div', 'tr', `<span class="mono" style="flex:0 0 110px">${s === 0 ? 'embeddings' : 'layer ' + s * 3}</span>${cells}`));
   });
-  out.lastChild.replaceWith(lt, el('p', 'note', 'Only the last row is what the model actually outputs. Earlier rows apply the final LayerNorm and output matrix to a half-finished vector, which was never trained for that, so they are rough but they show where the answer comes from.'));
+  out.lastChild.replaceWith(lt, el('p', 'note', 'The final row represents actual model output. Intermediate rows apply final LayerNorm and the unembedding matrix to unfinished hidden states. Intermediate representations never received training for immediate output projection. These predictions remain approximate approximations that indicate where output representations form.'));
 }
 
 // ---------- 3D views ----------
@@ -552,13 +552,13 @@ function axes({ g, proj, line }) {
 
 let P6 = null;
 function build6() {
-  const S = states().filter((_, i) => i % 3 === 0), n = tr.n, vecs = []; // every third depth keeps the projection quick
-  S.forEach((m) => { // directions only, centred on this depth's own average so the picture shows how tokens differ from each other
+  const S = states().filter((_, i) => i % 3 === 0), n = tr.n, vecs = []; // Subsampling every third depth preserves projection speed.
+  S.forEach((m) => { // Unit vectors centered on depth mean so visualisation captures relative differences.
     const u = Array.from({ length: n }, (_, i) => unit(row(m, i, tr.d))), mu = Array.from(u[0], (_, k) => u.reduce((t, v) => t + v[k], 0) / n);
     u.forEach((v) => vecs.push(v.map((x, k) => x - mu[k])));
   });
   const c = pca3(vecs);
-  P6 = S.map((_, s) => { // each depth is scaled so its typical token sits the same distance out; a far outlier (usually the first token) is held inside the box
+  P6 = S.map((_, s) => { // Scales each depth to standard distance while constraining outliers.
     const pts = c.slice(s * n, (s + 1) * n), r = pts.map((p) => Math.hypot(...p)), k = 0.6 / ([...r].sort((x, y) => x - y)[n >> 1] || 1);
     return pts.map((p, i) => p.map((x) => x * k * Math.min(1, 1.6 / (r[i] * k))));
   });
@@ -571,13 +571,13 @@ const scene6 = createScene($('space3d'), (f) => {
   const pos = (i) => P6[s0][i].map((x, a) => x + (P6[s1_][i][a] - x) * k);
   for (let s = 0; s < L; s++) line(P6[s][q], P6[s + 1][q], 'rgba(79,201,138,.7)', 1.5);
   const A = tr.layers[clamp(Math.ceil(depth), 1, tr.layers.length) - 1].attn, mean = (i, j) => A.reduce((t, a) => t + a[i * n + j], 0) / tr.heads, kk = key();
-  for (let i = 1; i < n; i++) for (let j = 0; j < i; j++) { // every pair, always: weight is this depth's attention averaged over heads
+  for (let i = 1; i < n; i++) for (let j = 0; j < i; j++) { // Weight reflects attention averaged across all heads at this depth.
     if (i === q && j === kk) continue;
     const w = mean(i, j);
     line(pos(i), pos(j), `rgba(63,197,189,${0.04 + 0.9 * Math.sqrt(w)})`, 0.4 + 7 * w);
   }
-  const wq = Math.sqrt(mean(q, kk)); // sqrt: a typical mean weight is small, this makes the difference between weak and strong visible
-  line(pos(q), pos(kk), `rgba(232,237,241,${0.15 + 0.85 * wq})`, 1 + 9 * wq); // the followed pair: bolder and brighter with more attention
+  const wq = Math.sqrt(mean(q, kk)); // Square root scaling enhances visual contrast between weak and strong attention weights.
+  line(pos(q), pos(kk), `rgba(232,237,241,${0.15 + 0.85 * wq})`, 1 + 9 * wq); // Bold highlight for the followed pair.
   g.font = '11px "IBM Plex Mono", monospace';
   const pts = Array.from({ length: n }, (_, i) => ({ i, p: proj(pos(i)) })).sort((a, b) => a.p.z - b.p.z);
   pts.forEach(({ i, p }) => {
@@ -602,7 +602,7 @@ function s6() {
 
 // ---------- words: the embedding table itself ----------
 let words = [], P7 = null, sel = 0, hits = [], probe = null;
-let E7 = null; // { mu, cn, cand }: vocabulary mean, centered row lengths, ids of plain whole-word tokens
+let E7 = null; // Object holds vocabulary mean and centered row lengths and ids of plain whole-word tokens.
 const neighbors = () => words.map((w, i) => [i, dotv(words[sel].v, w.v)]).filter(([i]) => i !== sel).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
 async function prepWords(onProgress) {
@@ -620,10 +620,10 @@ async function prepWords(onProgress) {
   E7 = { mu, cn, cand };
 }
 
-// a word (or phrase) -> { v: unit centered vector, ids }. The leading space matters: " cat" is its own token.
+// Maps a word to a unit centered vector and token ids. Leading space isolates token.
 async function wordVec(w) {
   let { ids } = await tokenize(' ' + w);
-  if (ids.length > 1) { const cap = (await tokenize(' ' + w[0].toUpperCase() + w.slice(1))).ids; if (cap.length === 1) ids = cap; } // names are usually one token when capitalised
+  if (ids.length > 1) { const cap = (await tokenize(' ' + w[0].toUpperCase() + w.slice(1))).ids; if (cap.length === 1) ids = cap; } // Capitalised names often form single tokens.
   const E = W[WTE], d = tr.d, v = new Float32Array(d);
   ids.forEach((id) => { for (let k = 0; k < d; k++) v[k] += (E[id * d + k] - E7.mu[k]) / ids.length; });
   return { v: unit(v), ids };
@@ -667,7 +667,7 @@ async function addWord(w) {
 }
 
 function list7() {
-  P7 = normalize(pca3([...words.map((x) => x.v), ...(probe ? [probe.v, ...probe.nv] : [])])); // after the words: your result, then its nearest vocabulary words
+  P7 = normalize(pca3([...words.map((x) => x.v), ...(probe ? [probe.v, ...probe.nv] : [])])); // Appends query result followed by nearest vocabulary words.
   const chips = el('div', 'chips');
   words.forEach((x, i) => {
     const b = el('button', 'chip small' + (i === sel ? ' on' : ''), esc(x.w + (x.multi ? '*' : '')));
@@ -702,7 +702,7 @@ async function s7() {
   await load7();
 }
 
-// vector arithmetic: sum signed word vectors, then search EVERY token in the vocabulary
+// Vector arithmetic sums signed word vectors and searches the full vocabulary.
 async function calc() {
   const parts = $('expr').value.toLowerCase().split(/([+-])/).map((s) => s.trim()).filter(Boolean);
   const terms = []; let sign = 1;
@@ -719,7 +719,7 @@ async function calc() {
   probe.nv = probe.near.slice(0, 6).map(([id]) => unit(Float32Array.from(W[WTE].subarray(id * tr.d, (id + 1) * tr.d), (x, k) => x - E7.mu[k])));
   list7();
   const c = P7[words.length], dist = probe.nv.map((_, k) => Math.hypot(...P7[words.length + 1 + k].map((x, a) => x - c[a]))).sort((x, y) => x - y);
-  scene7.focus(c, Math.max(1, 0.8 / Math.max(dist[dist.length >> 1], 0.05))); // fit the typical match, so one stray word does not undo the zoom
+  scene7.focus(c, Math.max(1, 0.8 / Math.max(dist[dist.length >> 1], 0.05))); // Focus centers on median match distance to stabilise camera zoom.
   showCalc(terms);
 }
 
@@ -729,7 +729,7 @@ function vocabNear(skip) {
     if (skip.has(id)) continue;
     let s = 0; const o = id * d;
     for (let k = 0; k < d; k++) s += E[o + k] * probe.v[k];
-    all.push([id, (s - muv) / cn[id]]); // cosine with the centered row, without building the centered matrix
+    all.push([id, (s - muv) / cn[id]]); // Computes cosine similarity against centered rows without allocating centered matrices.
   }
   return all.sort((a, b) => b[1] - a[1]).slice(0, 8);
 }
@@ -743,7 +743,7 @@ function showCalc(terms) {
   vocT.append(el('div', 'tr th', `<span class="lbl">Closest words in the model's whole vocabulary (${cand.length.toLocaleString()} whole-word tokens searched)</span>`));
   probe.near.forEach(([id, s]) => vocT.append(barRow(piece(id).trim(), s, s.toFixed(2), false, 110, C.accent)));
   $('s7calc').replaceChildren(
-    el('p', 'small', `<span class="step-name">${esc(probe.label)}</span> as a vector (white square on the map, with its closest vocabulary words around it). Each word is its row in the embedding table, centered on the vocabulary average. The signed vectors are summed, scaled to length 1, and compared by cosine with every candidate. Embedding tables were not trained for analogies, so expect related words more than exact answers.`),
+    el('p', 'small', `<span class="step-name">${esc(probe.label)}</span> vector representation appears as a white square surrounded by nearest vocabulary neighbors. Each word corresponds to an embedding table row centered on the vocabulary mean. Signed vectors sum together into a unit-normalised probe vector compared by cosine similarity against candidate tokens. Embedding spaces reflect co-occurrence rather than explicit relational geometry so nearest neighbors indicate semantic association rather than strict symbolic analogies.`),
     mapT, vocT);
 }
 
@@ -759,8 +759,8 @@ function gRender() {
   $('gkText').textContent = K;
   $('gtext').replaceChildren(...g.pieces.map((p, i) => el('span', 'chip small' + (i >= g.nPrompt ? ' gen' : '') + (i === n - 1 ? ' on' : ''), esc(vis(p)))));
   const t = el('div', 'table');
-  t.append(el('div', 'tr th', `<span class="lbl">Next token · the ${K} kept tokens hold ${(keptP * 100).toFixed(1)}% of the probability and share all of it · bars: model's probability, right: chance of being picked · click one to choose it</span>`));
-  g.cands = { top: kept }; // greedy takes the first kept token
+  t.append(el('div', 'tr th', `<span class="lbl">Next token · Top ${K} candidate tokens aggregate ${(keptP * 100).toFixed(1)}% probability · Bars reflect model probability · Right column reflects sampling chance · Row selection appends chosen token</span>`));
+  g.cands = { top: kept }; // Greedy selection picks the top candidate token.
   tk.top.slice(0, 10).forEach((x, rank) => {
     const cut = rank >= K, r = el('button', 'tr' + (cut ? ' faint' : ''), `<span class="mono" style="flex:0 0 110px">${esc(vis(piece(x.id)))}</span><div class="bar"><i style="width:${x.p / tk.top[0].p * 100}%;${cut ? `background:${C.low}` : ''}"></i></div><span class="num">${cut ? 'cut' : (x.p / keptP * 100).toFixed(1) + '%'}</span>`);
     r.onclick = () => gAdvance(x.id);
@@ -768,7 +768,7 @@ function gRender() {
   });
   $('gout').replaceChildren(el('p', 'small', `<span class="mono">${esc(g.pieces.join(''))}</span><span class="step-name">▍</span>`), t);
   const w = g.attn[g.l][g.h], a = el('div', 'table');
-  a.append(el('div', 'tr th', `<span class="lbl">Layer ${g.l + 1} · head ${g.h} · where “${esc(vis(g.pieces[n - 1]))}” looks (it can only see itself and earlier tokens)</span>`));
+  a.append(el('div', 'tr th', `<span class="lbl">Layer ${g.l + 1} · head ${g.h} · Attention distribution for “${esc(vis(g.pieces[n - 1]))}” across preceding tokens and itself</span>`));
   g.pieces.forEach((p, j) => a.append(barRow(vis(p), w[j], w[j].toFixed(2), j === n - 1)));
   $('gattn').replaceChildren(a);
   const num = (count, cur, set, from) => Array.from({ length: count }, (_, k) => {
@@ -789,8 +789,8 @@ const gBusy = async (fn) => {
 
 const gStart = () => gBusy(async () => {
   let t = await tokenize($('gprompt').value);
-  if (!t.ids.length) t = { ids: [0], pieces: ['<|endoftext|>'] }; // empty prompt: start-of-text token
-  const ids = t.ids.slice(-40); // recent context only keeps a click quick
+  if (!t.ids.length) t = { ids: [0], pieces: ['<|endoftext|>'] }; // Empty prompt fallback to start-of-text token.
+  const ids = t.ids.slice(-40); // Context capped at 40 tokens for interactive responsiveness.
   g.st = newState(W);
   g.ids = ids; g.pieces = t.pieces.slice(-40); g.nPrompt = ids.length;
   ({ logits: g.logits, attn: g.attn } = step(W, g.st, ids));
@@ -800,7 +800,7 @@ const gStart = () => gBusy(async () => {
 const gAdvance = (id) => gBusy(async () => {
   g.pieces.push(piece(id));
   g.ids.push(id);
-  ({ logits: g.logits, attn: g.attn } = step(W, g.st, [id])); // KV cache: only the new token is computed
+  ({ logits: g.logits, attn: g.attn } = step(W, g.st, [id])); // KV cache avoids recomputing previous positions.
   gRender();
 });
 
@@ -831,7 +831,7 @@ function render() {
   STAGES.forEach((_, i) => { $('s' + (i + 1)).hidden = i !== stage; });
   [...$('tabs').children].forEach((b, i) => b.classList.toggle('on', i === stage));
   $('stageTitle').textContent = STAGES[stage][1];
-  $('stageText').innerHTML = STAGES[stage][2] + (stage === 5 ? ` The real vectors have ${tr.d} numbers; PCA picks the 3 directions along which all tokens at all depths differ most, so the axes have no names. Every teal line is attention from a token to an earlier one it can see: brighter and thicker where the ${tr.heads} heads attend more at this depth. The white line is the pair chosen on the Attention page. Slide from the embeddings to layer ${tr.layers.length} and watch the tokens regroup as they take in context (every third layer is computed, in between is interpolated). The first token (yellow) is special: heads park attention on it. Drag to rotate, scroll or pinch to zoom, shift-drag (or right-drag) to pan, Reset view to start over.` : stage === 6 ? ' Distances are only roughly faithful, since 576 dimensions are squashed to 3. Click a point or a word to list its nearest neighbours. Drag to rotate, scroll or pinch to zoom, shift-drag (or right-drag) to pan, Reset view to start over.' : '');
+  $('stageText').innerHTML = STAGES[stage][2] + (stage === 5 ? ` The full hidden vectors contain ${tr.d} dimensions. PCA extracts the 3 orthogonal axes of maximum variance across all tokens and depths. Teal edges indicate attention from tokens to preceding context where thickness and brightness scale with aggregate attention across all ${tr.heads} heads. The white edge highlights the token pair selected on the Attention page. The depth slider advances representations from initial embeddings through layer ${tr.layers.length} while intermediate positions interpolate between evaluated layers. The initial sequence token in yellow serves as an attention sink. Pointer drag rotates the view. Scroll zooms. Shift-drag pans. Reset view restores default camera orientation.` : stage === 6 ? ' Geometric distances provide low-dimensional approximations because 576 dimensions project into 3 principal components. Point selection displays nearest neighbors by cosine similarity. Pointer drag rotates the view. Scroll zooms. Shift-drag pans. Reset view restores default camera orientation.' : '');
   $('ctx').hidden = stage === 7;
   $('layers').parentElement.hidden = ![1, 2, 3].includes(stage);
   chips();
@@ -891,7 +891,7 @@ const SENTENCES = [
   'The king asked the queen to open the window.',
 ];
 $('run').onclick = run;
-$('random').onclick = () => { // any sentence but the current one
+$('random').onclick = () => { // Selects an alternative sentence from the preset list.
   const rest = SENTENCES.filter((x) => x !== $('text').value.trim());
   $('text').value = rest[Math.floor(Math.random() * rest.length)];
   run();
@@ -924,7 +924,7 @@ const addIn = async () => {
 $('addWord').onclick = addIn;
 $('wordIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') addIn(); });
 
-// click-to-select a word, ignoring the end of a drag
+// Word selection handler that discriminates clicks from drag gestures.
 let down = [0, 0];
 $('wordSpace').addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
 $('wordSpace').addEventListener('click', (e) => {
