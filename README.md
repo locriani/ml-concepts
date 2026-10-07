@@ -9,7 +9,7 @@ One real model, SmolLM2-135M (Llama architecture, Apache-2.0, 135M params, 30 la
 ```bash
 python3 -m http.server 5391 -d transformers   # then open http://localhost:5391
 node transformers/llama.test.mjs               # forward-pass invariants on synthetic weights
-npx -y firebase-tools@15.32.1 deploy --only hosting   # publish to https://ml-concepts.letstakethis.online (Firebase project canwetakethisonline, needs `firebase login`)
+npx -y firebase-tools@15.32.1 deploy --only hosting   # publish to https://ml-concepts.canwetakethis.online (Firebase project canwetakethisonline, needs `firebase login`)
 ```
 
 First run downloads 269 MB (bf16) from Hugging Face and keeps it in the browser's private file storage (OPFS; the Cache API rejects files this size). `src/llama.js` is our own forward pass (RoPE, GQA, RMSNorm, SwiGLU); it has not been compared numerically to a reference implementation yet, only checked for invariants, sensible predictions and working word analogies. Dependency: transformers.js 4.3.1 (tokenizer only, CDN-pinned).
