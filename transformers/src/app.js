@@ -197,7 +197,7 @@ function s1() {
     strip('word', 'row of the embedding table for this token id: the input to layer 1', embed.word, n, d, lab, q, 17, C.accent, pickQuery),
     near,
     el('span', 'lbl', 'Where does position go?'),
-    P('Attention on its own has no idea of order: shuffle the tokens and every token still sees the same set. So a model has to be told where each token is. This model does it inside attention. Many others do it right here, in the embedding, by adding a second vector to the token\'s vector:'),
+    P('Attention on its own treats the tokens it can see as a set: it weighs each by its content, not by where it sits, so a token that sees "dog" and "man" cannot tell which came first. (The causal mask here gives each token a different set, the tokens before it, which leaks a little about position but not the order within the set.) So a model has to be told where each token is. This model does it inside attention. Many others do it right here, in the embedding, by adding a second vector to the token\'s vector:'),
     pos,
     P(`Below is what the first kind looks like for this sentence. It is an illustration, not part of this model: the classic sine and cosine position vectors, computed live, added to the embeddings above (the embeddings scaled by √d = ${sc}, as in the original paper; typical size of a number is then ${rms(scaled).toFixed(2)} for the tokens and ${rms(pe).toFixed(2)} for the positions). Fast waves in the first dimensions, slow waves later, so every position gets its own pattern.`),
     strip('position', 'one fixed vector per position 0, 1, 2…, the same for any text', pe, n, d, lab, q, 17, C.high, pickQuery),
@@ -849,6 +849,7 @@ async function run() {
     pieces = t.pieces.slice(0, 26);
     tr = trace(W, ids);
     q = pieces.indexOf(prev) > 0 ? pieces.indexOf(prev) : Math.max(1, pieces.indexOf(' it'));
+    q = Math.min(q, pieces.length - 1); // a one-token prompt has only token 0
     P6 = null;
     render();
   } finally { $('run').disabled = false; }
