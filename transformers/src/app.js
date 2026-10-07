@@ -26,7 +26,7 @@ let stage = 0, q = 1, layer = 12, head = 0, scaled = true, kj = null, astep = 0;
 const key = () => (kj != null && kj <= q ? kj : Math.max(0, q - 1)); // the key token of the followed pair: any token up to the query; by default the one just before it
 
 const STAGES = [
-  ['Embed', 'Text to vectors', 'The text is split into byte-pair tokens (a leading space belongs to the token, shown as ␣). Each token id looks up a 576-number vector in the embedding table, and that vector enters layer 1 as is. There is no position vector here: this model marks position inside attention instead (see the next stage). One row per token, one column per dimension: teal is positive, orange is negative.'],
+  ['Embed', 'Text to vectors', 'The text is split into byte-pair tokens (a leading space belongs to the token, shown as ␣). Each token id looks up a 576-number vector in the embedding table, and that vector enters layer 1 as is. This model adds no position vector to the embedding; many others do, and the last section shows what that looks like and where this model puts position instead. One row per token, one column per dimension: teal is positive, orange is negative.'],
   ['Attention', 'All heads in a layer, then one head', 'Each layer runs 9 heads in parallel and each learns its own pattern. To save memory, each group of 3 heads shares one set of keys and values (heads 0 to 2, 3 to 5, 6 to 8). The cards are every head\'s token-by-token attention matrix (rows look at columns); the outlined row is the token you follow. A token may only look at itself and earlier tokens, so everything above the diagonal is blocked. Click a card to open that head below. Below the cards, five steps follow the token you follow through the head you open: project, score, softmax, mix, combine.'],
   ['Heads', 'What each head does', 'Measured on the sentence above: for every head in the model, how much attention goes to the previous token, the token itself and the first token, and how sharply it focuses. Pick a measure to colour the layer-by-head grid, then click a cell to inspect that head. These are properties of this sentence, not fixed roles: the same head can behave differently on other text.'],
   ['Layer', 'Inside one layer, step by step', 'One layer applied to the token you follow, in order. Every layer has two halves, and each reads the token\'s vector and adds something to it: attention (gather from other tokens) and an MLP (process this token on its own). Before each half the vector is normalised (RMSNorm); after each half the result is added back (a residual), so nothing is overwritten and a token\'s vector changes gradually from layer to layer. The numbers are for the token and layer you picked above; pick another layer to compare, or click a layer in the table at the bottom.'],
@@ -133,10 +133,63 @@ function attnView(l, hd) {
   return { sc, at };
 }
 
+// the vocabulary tokens whose embedding points most like this one (cosine over the whole table)
+function nearTokens(id) {
+  tr.nearTok ??= {};
+  if (tr.nearTok[id]) return tr.nearTok[id];
+  const E = W[WTE], d = tr.d, V = E.length / d, v = E.subarray(id * d, (id + 1) * d), nv = l2(v), c = new Float32Array(V);
+  for (let i = 0; i < V; i++) {
+    let dp = 0, m = 0; const o = i * d;
+    for (let k = 0; k < d; k++) { dp += E[o + k] * v[k]; m += E[o + k] * E[o + k]; }
+    c[i] = dp / (Math.sqrt(m) * nv || 1);
+  }
+  return (tr.nearTok[id] = Array.from(c.keys()).filter((i) => i !== id).sort((x, y) => c[y] - c[x]).slice(0, 8).map((i) => [i, c[i]]));
+}
+
+const POSITION = [
+  ['Original Transformer (2017)', 'a fixed sine and cosine vector for each position, added to the embedding before layer 1'],
+  ['GPT-2', 'a learned vector for each position (a second table, like the embedding table), added to the embedding before layer 1'],
+  ['BERT', 'a learned position vector (and a sentence-A/B vector) added to the embedding, then normalised'],
+  ['Llama, SmolLM2 (this model), Mistral, Qwen', 'nothing is added to the embedding; query and key are rotated by position inside every attention layer (RoPE)'],
+  ['T5, BLOOM, MPT', 'nothing is added to the embedding; attention scores get a bias that depends on the distance between two tokens'],
+];
+
 function s1() {
-  const { n, d, embed } = tr, lab = tokLabels();
+  const { n, d, embed } = tr, lab = tokLabels(), tok = esc(vis(pieces[q])), P = (html) => el('p', 'small', html), rms = (a) => l2(a) / Math.sqrt(a.length);
+  const lens = pieces.map((_, i) => l2(row(embed.word, i, d))), mx = Math.max(...lens);
+  const t = el('div', 'table');
+  t.append(el('div', 'tr th', `<span class="lbl" style="flex:0 0 110px">token</span><span class="lbl num">id</span><span class="lbl" style="flex:1">length of its vector</span><span class="lbl num">length</span>`));
+  pieces.forEach((p, i) => {
+    const b = el('button', 'tr' + (i === q ? ' on' : ''), `<span class="mono" style="flex:0 0 110px">${esc(vis(p))}</span><span class="num">${tr.ids[i]}</span><div class="bar"><i style="width:${lens[i] / mx * 100}%"></i></div><span class="num">${lens[i].toFixed(2)}</span>`);
+    b.onclick = () => { q = i; render(); };
+    t.append(b);
+  });
+
+  const near = el('div', 'table'), mine = [...Array(n).keys()].filter((i) => i !== q).map((i) => [i, cosine(row(embed.word, q, d), row(embed.word, i, d))]).sort((x, y) => y[1] - x[1]).slice(0, 4);
+  near.append(el('div', 'tr th', `<span class="lbl">Tokens whose vector points most like ${tok}'s (cosine) · in this sentence, then in the whole vocabulary</span>`));
+  mine.forEach(([i, c]) => near.append(barRow(vis(pieces[i]), Math.max(0, c), c.toFixed(2), false, 110)));
+  nearTokens(tr.ids[q]).forEach(([id, c]) => near.append(barRow(vis(piece(id)), Math.max(0, c), c.toFixed(2), false, 110, C.accent)));
+
+  // illustration only: the classic sinusoidal position vector, as the original Transformer added it
+  const sc = Math.sqrt(d), pe = new Float32Array(n * d);
+  for (let p = 0; p < n; p++) for (let i = 0; i < d; i += 2) { const a = p / Math.pow(10000, i / d); pe[p * d + i] = Math.sin(a); pe[p * d + i + 1] = Math.cos(a); }
+  const scaled = embed.word.map((x) => x * sc), summed = scaled.map((x, k) => x + pe[k]);
+  const pos = el('div', 'table');
+  POSITION.forEach(([m, how]) => pos.append(el('div', 'tr', `<span class="mono" style="flex:0 0 230px">${esc(m)}</span><span class="small" style="flex:1">${esc(how)}</span>`)));
+
   $('s1out').replaceChildren(
+    P(`The sentence is cut into <b>${n} tokens</b>. Each token is a number (its id); the id picks one row of the model's embedding table, which has one row for each of the ${(W[WTE].length / d).toLocaleString()} tokens in the vocabulary and ${d} numbers per row. Click a row to follow that token.`),
+    t,
+    P(`The rows below are those rows of the table, copied out. They are the same for a token wherever it appears and whatever surrounds it: this is the token on its own, before any context. Meaning is in the direction a vector points, which is why the tokens in the next table are the ones whose vectors point most like ${tok}'s.`),
     strip('word', 'row of the embedding table for this token id: the input to layer 1', embed.word, n, d, lab, q),
+    near,
+    el('span', 'lbl', 'Where does position go?'),
+    P('Attention on its own has no idea of order: shuffle the tokens and every token still sees the same set. So a model has to be told where each token is. This model does it inside attention. Many others do it right here, in the embedding, by adding a second vector to the token\'s vector:'),
+    pos,
+    P(`Below is what the first kind looks like for this sentence. It is an illustration, not part of this model: the classic sine and cosine position vectors, computed live, added to the embeddings above (the embeddings scaled by √d = ${sc}, as in the original paper; typical size of a number is then ${rms(scaled).toFixed(2)} for the tokens and ${rms(pe).toFixed(2)} for the positions). Fast waves in the first dimensions, slow waves later, so every position gets its own pattern.`),
+    strip('position', 'one fixed vector per position 0, 1, 2…, the same for any text', pe, n, d, lab, q, 17, C.high),
+    strip('token + position', `what such a model would send into layer 1; ${tok} here is ${cosine(row(scaled, q, d), row(summed, q, d)).toFixed(2)} cosine from its plain embedding`, summed, n, d, lab, q, 17, C.ok),
+    el('p', 'note', 'With position added, the same word at two places in a text would enter layer 1 as two different vectors. Here it enters as one vector, and attention tells the two places apart by rotating queries and keys (see the Attention stage).'),
   );
 }
 
