@@ -28,7 +28,7 @@ const key = () => (kj != null && kj <= q ? kj : Math.max(0, q - 1)); // Key toke
 const STAGES = [
   ['Embed', 'Text to vectors', 'The text splits into byte-pair tokens. A leading space belongs to the token and appears as ␣. Each token id retrieves a 576-dimensional vector from the embedding table. That vector enters layer 1 directly. This model adds no position vector to the embedding. Other architectures add position vectors directly to embeddings. The final section demonstrates that approach and shows rotary position embeddings instead. Each row represents one token. Each column represents one dimension. Teal indicates positive values while orange indicates negative values.'],
   ['Attention', 'All heads in a layer and head walkthrough', 'Each layer runs 9 heads in parallel and each learns distinct patterns. Groups of 3 heads share keys and values to reduce memory usage. Heads 0 through 2 share one set while heads 3 through 5 and heads 6 through 8 share the remaining sets. Each card displays one head token-by-token attention matrix where rows attend to columns. The outlined row indicates the followed token. Causal masking blocks positions above the diagonal because tokens only attend to preceding tokens and themselves. Selecting a card opens that head below. Five sequential steps process the followed token through the selected head: projection then scoring then softmax then mixing then output combination.'],
-  ['Heads', 'Measured behaviour of each head', 'Measurements reflect the sentence above across every head in the model. Metrics track attention allocated to the previous token and the token itself and the first token. Another metric measures attention focus sharpness. Selecting a metric colours the layer-by-head grid. Clicking a cell inspects that head. These measurements describe behaviour on this specific sentence rather than permanent roles. Heads vary behaviour across different texts.'],
+  ['Heads', 'Measured behaviour of each head', 'Measurements reflect the sentence above across every head in the model. Metrics track attention allocated to the previous token, the token itself and the first token. Another metric measures attention focus sharpness. Selecting a metric colours the layer-by-head grid. Clicking a cell inspects that head. These measurements describe behaviour on this specific sentence rather than permanent roles. Heads vary behaviour across different texts.'],
   ['Layer', 'Inside one layer step by step', 'One transformer layer applies sequentially to the followed token. Each layer contains two sub-blocks that read the vector and add updates to the residual stream. Attention gathers information from other tokens while the MLP processes the token independently. RMSNorm normalises the vector before each sub-block. Residual connections add each sub-block output back into the stream without overwriting previous values. The token vector therefore evolves gradually across depth. Displayed values correspond to the selected token and layer. The table at the bottom allows selecting other layers for comparison.'],
   ['Predict', 'Next-token prediction at each position', 'The model assigns next-token scores across all 49152 vocabulary tokens at each position using only preceding tokens. The first table compares top model predictions against actual subsequent tokens in the text. The second table tracks prediction emergence across depth. It applies final RMSNorm and the unembedding matrix to vectors from every third layer.'],
   ['Space', 'Token vectors in 3D', 'Token representations across model depths project into 3 dimensions. Each vector is normalised to unit length. Each depth level centers on its own mean vector. The visualisation displays relative token geometric relationships at each depth rather than global coordinate drift.'],
@@ -163,8 +163,8 @@ const POSITION = [
   ['Original Transformer (2017)', 'Fixed sinusoidal vectors added to token embeddings before layer 1'],
   ['GPT-2', 'Learned position vectors from a dedicated lookup table added to token embeddings before layer 1'],
   ['BERT', 'Learned position and segment vectors added to token embeddings followed by normalisation'],
-  ['Llama and SmolLM2 and Mistral and Qwen', 'Rotary position embeddings (RoPE) applied to queries and keys inside every attention layer without modifying initial embeddings'],
-  ['T5 and BLOOM and MPT', 'Relative position biases added to attention scores without modifying initial embeddings'],
+  ['Llama, SmolLM2, Mistral, Qwen', 'Rotary position embeddings (RoPE) applied to queries and keys inside every attention layer without modifying initial embeddings'],
+  ['T5, BLOOM, MPT', 'Relative position biases added to attention scores without modifying initial embeddings'],
 ];
 
 function s1() {
@@ -271,7 +271,7 @@ function attnSteps() {
     const open = el('button', 'btn', 'Open Layer stage');
     open.onclick = () => { stage = 3; render(); };
     body.push(
-      p(`All ${heads} heads execute concurrently with separate query and key and value projections. Each head produces a 64-dimensional output vector. Concatenation forms the ${d}-dimensional attention context vector with one row per head. A learned output projection matrix mixes information across all heads and projects an update to add to the residual stream for ${tok}.`),
+      p(`All ${heads} heads execute concurrently with separate query, key and value projections. Each head produces a 64-dimensional output vector. Concatenation forms the ${d}-dimensional attention context vector with one row per head. A learned output projection matrix mixes information across all heads and projects an update to add to the residual stream for ${tok}.`),
       strip('all heads', `Concatenated ${heads} head outputs forming attention context for ${tok}`, row(L.ctx, q, d), heads, dh, Array.from({ length: heads }, (_, h) => ['head ' + h]), head, 22, C.accent, pickHead),
       strip('attention output', 'Attention context projected through the output matrix', row(L.attnOut, q, d), 1, d, me, -1, 22, C.accent),
       el('div', 'row').appendChild(open).parentElement);
@@ -602,7 +602,7 @@ function s6() {
 
 // ---------- words: the embedding table itself ----------
 let words = [], P7 = null, sel = 0, hits = [], probe = null;
-let E7 = null; // Object holds vocabulary mean and centered row lengths and ids of plain whole-word tokens.
+let E7 = null; // Object holds the vocabulary mean, centered row lengths and ids of plain whole-word tokens.
 const neighbors = () => words.map((w, i) => [i, dotv(words[sel].v, w.v)]).filter(([i]) => i !== sel).sort((a, b) => b[1] - a[1]).slice(0, 6);
 
 async function prepWords(onProgress) {
