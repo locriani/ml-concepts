@@ -80,6 +80,7 @@ export function step(W, st, ids, rec = null) {
       const a = rmsNorm(x, W[P + 'input_layernorm.weight'], eps);
       keep(R?.ln1, a);
       const q = rope(matvec(W[P + 'self_attn.q_proj.weight'], a, d), p, dh, theta);
+      keep(R?.q, q);
       st.K[l].push(rope(matvec(W[P + 'self_attn.k_proj.weight'], a, kv * dh), p, dh, theta));
       st.V[l].push(matvec(W[P + 'self_attn.v_proj.weight'], a, kv * dh));
       const ctx = new Float32Array(d), rows = [];
@@ -101,6 +102,7 @@ export function step(W, st, ids, rec = null) {
       const m2 = rmsNorm(x, W[P + 'post_attention_layernorm.weight'], eps);
       keep(R?.ln2, m2);
       const gate = matvec(W[P + 'mlp.gate_proj.weight'], m2, ff), up = matvec(W[P + 'mlp.up_proj.weight'], m2, ff);
+      keep(R?.gate, gate); keep(R?.up, up);
       for (let k = 0; k < ff; k++) gate[k] = silu(gate[k]) * up[k]; // SwiGLU: the gate decides how much of each "up" feature passes
       keep(R?.ffHidden, gate);
       const f = matvec(W[P + 'mlp.down_proj.weight'], gate, d);
@@ -125,7 +127,7 @@ export function logitsOf(W, h) {
 // scores/attn[layer].[head] are [n, n]; masked (future) scores are -Infinity and their weights 0.
 export function trace(W, ids) {
   const { d, heads } = W.cfg, n = ids.length, st = newState(W);
-  const names = ['input', 'ln1', 'ctx', 'attnOut', 'resAttn', 'ln2', 'ffHidden', 'ffOut', 'out'];
+  const names = ['input', 'ln1', 'q', 'ctx', 'attnOut', 'resAttn', 'ln2', 'gate', 'up', 'ffHidden', 'ffOut', 'out'];
   const rec = { embed: { word: [] }, layers: st.K.map(() => ({ ...Object.fromEntries(names.map((k) => [k, []])), scores: Array.from({ length: heads }, () => []), attn: Array.from({ length: heads }, () => []) })) };
   const { logits } = step(W, st, ids, rec);
   const flat = (rows) => { const w = rows[0].length, a = new Float32Array(n * w); rows.forEach((r, i) => a.set(r, i * w)); return a; };
@@ -133,8 +135,8 @@ export function trace(W, ids) {
   return {
     n, d, heads, kv: W.cfg.kv, ids, logits,
     embed: { word: flat(rec.embed.word) },
-    layers: rec.layers.map((R) => ({
-      ...Object.fromEntries(names.map((k) => [k, flat(R[k])])),
+    layers: rec.layers.map((R, l) => ({
+      ...Object.fromEntries(names.map((k) => [k, flat(R[k])])), k: flat(st.K[l]), v: flat(st.V[l]), // q: [n, d]; k, v: [n, kv * dh], rotated keys as the cache holds them
       scores: R.scores.map((r) => square(r, -Infinity)), attn: R.attn.map((r) => square(r, 0)),
     })),
   };

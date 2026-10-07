@@ -56,6 +56,17 @@ A.layers[1].input.forEach((x, i) => assert.equal(x, A.layers[0].out[i])); // res
 A.layers[0].resAttn.forEach((x, i) => assert(Math.abs(x - A.layers[0].input[i] - A.layers[0].attnOut[i]) < 1e-5));
 A.layers[0].out.forEach((x, i) => assert(Math.abs(x - A.layers[0].resAttn[i] - A.layers[0].ffOut[i]) < 1e-5));
 assert.equal(A.layers[0].ffHidden.length, n * ff);
+A.layers[0].ffHidden.forEach((x, i) => assert(Math.abs(x - A.layers[0].gate[i] / (1 + Math.exp(-A.layers[0].gate[i])) * A.layers[0].up[i]) < 1e-5, 'hidden = silu(gate) * up'));
+// attention walk-through: q, k, v reproduce scores, and weights x values reproduce each head's slice of ctx
+for (const l of [0, 1]) for (let h = 0; h < heads; h++) for (let i = 0; i < n; i++) {
+  const Lr = A.layers[l], g = Math.floor(h / (heads / kv)) * dh, out = new Float32Array(dh);
+  for (let j = 0; j <= i; j++) {
+    const qv = Lr.q.subarray(i * d + h * dh, i * d + (h + 1) * dh), kj = Lr.k.subarray(j * kv * dh + g, j * kv * dh + g + dh), vj = Lr.v.subarray(j * kv * dh + g, j * kv * dh + g + dh);
+    assert(Math.abs(dotp(qv, kj) / Math.sqrt(dh) - Lr.scores[h][i * n + j]) < 1e-4, 'q.k/sqrt(dk) is the score');
+    for (let c = 0; c < dh; c++) out[c] += Lr.attn[h][i * n + j] * vj[c];
+  }
+  out.forEach((x, c) => assert(Math.abs(x - Lr.ctx[i * d + h * dh + c]) < 1e-4, 'sum of weight x value is the head output'));
+}
 
 // safetensors: bf16 widens exactly, f32 stays f32, and a misaligned header still yields correct views
 const bf = new Uint16Array([0x3f80, 0xc000, 0x4040]); // 1, -2, 3 in bf16

@@ -7,6 +7,17 @@ export function createScene(canvas, paint) {
   const rot = { ...home }, view = { zoom: 1, x: 0, y: 0 }; // view.x/y: pan in pixels
   let drag = null;
 
+  const projector = (w, h) => {
+    const cy = Math.cos(rot.yaw), sy = Math.sin(rot.yaw), cp = Math.cos(rot.pitch), sp = Math.sin(rot.pitch);
+    const S = Math.min(w, h) * 0.3 * view.zoom;
+    return ([x, y, z]) => {
+      const x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+      const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+      const k = 4 / (4 - z2);
+      return { x: w / 2 + view.x + x1 * S * k, y: h / 2 + view.y - y2 * S * k, z: z2, k };
+    };
+  };
+
   function redraw() {
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -19,14 +30,7 @@ export function createScene(canvas, paint) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.fillStyle = '#0a0d10';
     g.fillRect(0, 0, w, h);
-    const cy = Math.cos(rot.yaw), sy = Math.sin(rot.yaw), cp = Math.cos(rot.pitch), sp = Math.sin(rot.pitch);
-    const S = Math.min(w, h) * 0.3 * view.zoom;
-    const proj = ([x, y, z]) => {
-      const x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
-      const y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
-      const k = 4 / (4 - z2);
-      return { x: w / 2 + view.x + x1 * S * k, y: h / 2 + view.y - y2 * S * k, z: z2, k };
-    };
+    const proj = projector(w, h);
     const line = (a, b, col, lw, dash) => {
       const pa = proj(a), pb = proj(b);
       g.beginPath(); g.moveTo(pa.x, pa.y); g.lineTo(pb.x, pb.y);
@@ -68,5 +72,14 @@ export function createScene(canvas, paint) {
   });
   new ResizeObserver(redraw).observe(canvas);
 
-  return { redraw, reset: () => { Object.assign(rot, home); Object.assign(view, { zoom: 1, x: 0, y: 0 }); redraw(); } };
+  // centre the canvas on a world point at the given zoom
+  const focus = (pt, zoom) => {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    Object.assign(view, { zoom: Math.max(0.3, Math.min(8, zoom)), x: 0, y: 0 });
+    const p = projector(w, h)(pt);
+    view.x = w / 2 - p.x; view.y = h / 2 - p.y;
+    redraw();
+  };
+
+  return { redraw, focus, reset: () => { Object.assign(rot, home); Object.assign(view, { zoom: 1, x: 0, y: 0 }); redraw(); } };
 }
