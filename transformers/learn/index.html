@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="module" src="src/app.js"></script>
+</head>
+<body>
+<main class="page">
+
+  <header class="head">
+    <div class="head-row">
+      <h1>Learning</h1>
+      <span class="mono-id" id="spec">1 layer · d=16 · 2 heads · tied embeddings</span>
+      <a class="mono-id" href="../">Transformer</a>
+    </div>
+    <p class="muted">The model reads a word and guesses the next one. The bar is the probability of the true next word. The point’s height is the loss: how wrong those guesses are, as cross-entropy. Each step follows the gradient, the direction that lowers the loss, and moves a distance set by the learning rate. That update is gradient descent. Train all uses the mean gradient of every sentence. Train this sentence uses only that sentence’s gradient, so the other bars stay short. The tabs are backpropagation: the same gradient, walked from the logits back to the embedding. The <a href="../">Transformer</a> page runs a published model forward and does not train.</p>
+  </header>
+
+  <section id="ctx" class="panel" style="padding:12px;display:flex;flex-direction:column;gap:12px">
+    <div class="spread">
+      <span class="lbl">Loss <span id="lossNow" class="step-name">—</span></span>
+      <div class="legend">
+        <span><i style="background:var(--ok)"></i>true next word is the top guess</span>
+        <span><i style="background:var(--high)"></i>a different word is</span>
+        <span>width is its probability</span>
+      </div>
+    </div>
+    <div id="corpus"></div>
+    <form id="add" class="controls">
+      <input id="sentence" class="text" type="text" placeholder="Add a sentence" autocomplete="off">
+      <button class="btn" type="submit">Add</button>
+    </form>
+    <div class="controls">
+      <button id="reset" class="btn">Reset weights</button>
+      <button id="trainOne" class="btn">Train this sentence</button>
+      <button id="trainAll" class="btn pri">Train all</button>
+      <div class="stack tight grow">
+        <label for="lr" class="lbl">Learning rate · <span id="lrText">0.35</span></label>
+        <input id="lr" type="range" min="0.1" max="0.6" step="0.05" value="0.35">
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>Gradient descent</h2>
+      <p class="muted">Up is the loss. Each step moves along the gradient, scaled by the learning rate. The line bends when later gradients point a different way. Drag to look around. Scroll zooms.</p>
+    </div>
+    <div class="panel-b">
+      <div class="viewport"><canvas id="hill" class="cv" tabindex="0" aria-label="3D view of gradient descent. Height is the loss. The point steps along the gradient. Pointer drag rotates the view. Scroll zooms. Shift-drag pans."></canvas></div>
+    </div>
+  </section>
+
+  <nav id="tabs" class="tabs" aria-label="Stages"></nav>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2 id="stageTitle"></h2>
+      <p id="stageText" class="muted"></p>
+    </div>
+    <div class="panel-b" id="out"></div>
+  </section>
+
+  <p class="foot">Backpropagation is computed in this page. Finite differences check the gradient.</p>
+</main>
+</body>
+</html>

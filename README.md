@@ -26,6 +26,8 @@ The model runs in the browser from its published weights. Every number on the pa
 ```bash
 python3 -m http.server 5391 -d transformers   # local server at http://localhost:5391
 node transformers/llama.test.mjs               # forward-pass invariants on synthetic weights
+node transformers/learn/tiny.test.mjs          # backward pass against finite differences
+node transformers/queue/sim.test.mjs           # M/M/1 means, Little's law, unstable growth
 npx -y firebase-tools@15.32.1 deploy --only hosting   # publish to https://ml-concepts.canwetakethis.online (Firebase project canwetakethisonline requiring firebase login)
 ```
 
@@ -34,6 +36,18 @@ npx -y firebase-tools@15.32.1 deploy --only hosting   # publish to https://ml-co
 - `src/llama.js` implements the forward pass with RoPE, GQA, RMSNorm and SwiGLU.
 - It has not been compared numerically to a reference implementation yet. It is checked for invariants, sensible predictions and working word analogies.
 - Dependency: transformers.js 4.3.1 (tokenizer only with pinned CDN URL).
+
+## learning
+
+A separate series from the transformer explainer. A small model guesses the next word of a few real sentences, and you can add your own. The bars are the probability of each true next word. The height is the loss. Training steps follow the gradient, scaled by the learning rate. One sentence’s gradient leaves the others short. The mean gradient fits the set. The tabs are backpropagation from the logits to the embedding.
+
+The transformer server also serves this series at <http://localhost:5391/learn/>.
+
+## queues
+
+A supermarket with several registers, and the same people in two layouts. A line at each register, or one line that feeds the next free register. Utilization ρ = λ/(cμ) is the fraction of time each register is busy, and it is the same in either layout. The wait is not. Separate lines are c copies of an M/M/1 queue. One shared line is an M/M/c queue, and its wait uses Erlang's C formula. Each symbol in the formula highlights the part of the store it names.
+
+Served at <http://localhost:5391/queue/>.
 
 ## License
 

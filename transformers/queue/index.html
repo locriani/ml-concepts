@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Queues</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;600&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="module" src="src/app.js"></script>
+</head>
+<body>
+<main class="page">
+
+  <header class="head">
+    <div class="head-row">
+      <h1>Queues</h1>
+      <span class="mono-id">M/M/c · one line or a line each</span>
+      <a class="mono-id" href="../">Transformer</a>
+      <a class="mono-id" href="../learn/">Learning</a>
+    </div>
+    <p class="muted">A store with several registers. People arrive at rate λ, and each register, while someone is there, checks them out at rate μ. Utilization ρ = λ/(cμ) is the fraction of time each register is busy. It is the same whether there is one line or a line at each register. The wait is not. A line at each register is c separate M/M/1 queues: you stay in the line you walked up to, so a register can sit idle while another line still has people. One line feeding every register is an M/M/c queue: the next free register takes the next person. Click a symbol. The store marks the thing that symbol names.</p>
+  </header>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>Utilization</h2>
+      <p class="muted" id="formulaNote"></p>
+    </div>
+    <div class="panel-b">
+      <div class="formula" id="formula">
+        <button type="button" data-part="rho" aria-pressed="true"><span class="sym">ρ</span><span class="subn" id="nRho">—</span></button>
+        <span class="op">=</span>
+        <button type="button" data-part="lam"><span class="sym">λ</span><span class="subn" id="nLam">—</span></button>
+        <span class="op">/</span>
+        <span class="group">
+          <span class="op">(</span>
+          <button type="button" data-part="c"><span class="sym">c</span><span class="subn" id="nC">—</span></button>
+          <span class="op">×</span>
+          <button type="button" data-part="mu"><span class="sym">μ</span><span class="subn" id="nMu">—</span></button>
+          <span class="op">)</span>
+        </span>
+      </div>
+      <div class="controls">
+        <label class="stack grow">Arrival rate λ · <span id="lamText" class="step-name">2.40</span>
+          <input id="lam" type="range" min="0.4" max="4" step="0.1" value="2.4" aria-label="Arrival rate">
+        </label>
+        <label class="stack grow">Service rate μ · <span id="muText" class="step-name">1.00</span>
+          <input id="mu" type="range" min="0.5" max="2" step="0.1" value="1" aria-label="Service rate">
+        </label>
+        <label class="stack grow">Speed · <span id="spdText" class="step-name">2</span>
+          <input id="spd" type="range" min="1" max="12" step="1" value="2" aria-label="Speed">
+        </label>
+        <div class="chips" id="counts">
+          <button class="chip small" type="button" data-c="1">1 register</button>
+          <button class="chip small" type="button" data-c="2">2</button>
+          <button class="chip small" type="button" data-c="3">3</button>
+          <button class="chip small" type="button" data-c="4">4</button>
+        </div>
+        <div class="chips" id="presets">
+          <button class="chip small" type="button" data-l="1.2" data-m="1" data-c="3">Quiet</button>
+          <button class="chip small" type="button" data-l="2.4" data-m="1" data-c="3">Busy</button>
+          <button class="chip small" type="button" data-l="3.6" data-m="1" data-c="3">Saturated</button>
+        </div>
+        <div class="row">
+          <button id="run" class="btn pri" type="button">Pause</button>
+          <button id="reset" class="btn" type="button">Reset</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>The rates are averages</h2>
+      <p class="muted">Arrivals and checkouts are messy. λ is how many people arrive per unit time, on average, so the mean gap is 1/λ. μ is how many checkouts one register finishes per unit time, on average, so the mean checkout is 1/μ. The bars are this store. The curve is the exponential those averages imply. The dash is the mean.</p>
+    </div>
+    <div class="panel-b">
+      <div class="viewport"><canvas id="dist" class="cv still dist" aria-label="Distributions of the time between arrivals and of checkout time. Each has a mean marked."></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--high)"></i>time between arrivals</span>
+        <span><i style="background:var(--accent)"></i>checkout time</span>
+        <span>dashed is the mean</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>Two layouts, same people</h2>
+      <p class="muted">Both sides get the same arrivals and the same checkout times. On the left each person picks a register at random and stays. On the right there is one line, and the next free register takes the next person.</p>
+    </div>
+    <div class="panel-b">
+      <div class="viewport"><canvas id="store" class="cv still store" tabindex="0" aria-label="Two supermarkets. The left has a line at each register. The right has one line and several registers."></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--high)"></i>waiting</span>
+        <span><i style="background:var(--accent)"></i>at a register</span>
+        <span><i style="background:var(--high)"></i>idle while another line waits</span>
+      </div>
+      <div class="pair">
+        <div class="stack">
+          <button type="button" class="layout" data-part="lanes">A line at each register</button>
+          <div class="formula sub">
+            <span class="op">Wq</span>
+            <span class="op">=</span>
+            <button type="button" data-part="rho"><span class="sym">ρ</span></button>
+            <span class="op">/</span>
+            <span class="op">(</span>
+            <button type="button" data-part="mu"><span class="sym">μ</span></button>
+            <span class="op">×</span>
+            <button type="button" data-part="rho"><span class="sym">1−ρ</span></button>
+            <span class="op">)</span>
+            <span class="op">=</span>
+            <span class="op" id="wLanes">—</span>
+          </div>
+          <p class="note" id="measLanes"></p>
+        </div>
+        <div class="stack">
+          <button type="button" class="layout" data-part="shared">One line, every register</button>
+          <div class="formula sub">
+            <span class="op">Wq</span>
+            <span class="op">=</span>
+            <button type="button" data-part="pool"><span class="sym">C</span><span class="subn" id="nErlang">—</span></button>
+            <span class="op">/</span>
+            <span class="op">(</span>
+            <button type="button" data-part="c"><span class="sym">c</span></button>
+            <span class="op">×</span>
+            <button type="button" data-part="mu"><span class="sym">μ</span></button>
+            <span class="op">−</span>
+            <button type="button" data-part="lam"><span class="sym">λ</span></button>
+            <span class="op">)</span>
+            <span class="op">=</span>
+            <span class="op" id="wShared">—</span>
+          </div>
+          <p class="note" id="measShared"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>People waiting</h2>
+      <p class="muted">How many people are standing in line. Orange is every separate line added together. Teal is the one shared line. The dashed line is that layout’s steady mean, Lq, drawn while ρ &lt; 1.</p>
+    </div>
+    <div class="panel-b">
+      <div class="viewport"><canvas id="trace" class="cv still trace" aria-label="People waiting over time. Orange is a line at each register. Teal is one shared line."></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--high)"></i>a line at each register</span>
+        <span><i style="background:var(--accent)"></i>one line</span>
+        <span>dashed is the steady mean</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-h">
+      <h2>Why the wait gets long</h2>
+      <p class="muted">Mean wait Wq against utilization ρ. Both curves climb without a bound as ρ reaches 1. The one shared line stays under the separate lines the whole way. The dots are this store.</p>
+    </div>
+    <div class="panel-b">
+      <div class="viewport"><canvas id="knee" class="cv still knee" aria-label="Mean wait against utilization for both layouts. Both curves climb as utilization approaches 1."></canvas></div>
+      <div class="legend">
+        <span><i style="background:var(--high)"></i>Wq, a line each</span>
+        <span><i style="background:var(--accent)"></i>Wq, one line</span>
+      </div>
+    </div>
+  </section>
+
+  <p class="foot">Exponential gaps between arrivals, exponential checkout times. The waits are the steady means. The picture is one sample path of both layouts.</p>
+
+</main>
+</body>
+</html>
