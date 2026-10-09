@@ -201,7 +201,7 @@ function startLane(s, i, cust) {
 function departShared(s, i) {
   const cust = s.shared.servers[i];
   s.shared.nDone++;
-  s.shared.wait += cust.started - cust.born;
+  s.shared.wait += cust.started - cust.born + (cust.held || 0);
   if (s.shared.line.length) startShared(s, i, s.shared.line.shift());
   else { s.shared.servers[i] = null; s.shared.nextD[i] = Infinity; }
   checkShared(s);
@@ -210,7 +210,7 @@ function departShared(s, i) {
 function departLane(s, i) {
   const ln = s.lanes[i];
   ln.nDone++;
-  ln.wait += ln.serving.started - ln.serving.born;
+  ln.wait += ln.serving.started - ln.serving.born + (ln.serving.held || 0);
   if (ln.q.length) startLane(s, i, ln.q.shift());
   else { ln.serving = null; ln.nextD = Infinity; }
 }
@@ -218,6 +218,91 @@ function departLane(s, i) {
 function checkShared(s) {
   const idle = s.shared.servers.some((x) => x == null);
   if (s.shared.line.length && idle) s.shared.bad++;
+}
+
+// Keep the people. New λ and μ apply to the time still left; a new register
+// opens empty; a closed one parks its customer on the last register that stays.
+// ponytail: a closed register's queue joins the last open line. It does not rebalance the others.
+export function configurePair(s, lambda, mu, c) {
+  if (lambda !== s.lambda) {
+    const left = Math.max(0, s.nextA - s.t);
+    const scale = s.lambda / lambda;
+    const realized = Math.max(0, s.spanA - left) + left * scale;
+    if (s.gaps.length) {
+      s.gapSum += realized - s.gaps[s.gaps.length - 1];
+      s.gaps[s.gaps.length - 1] = realized;
+    }
+    s.spanA = realized;
+    s.nextA = s.t + left * scale;
+    s.lambda = lambda;
+  }
+  if (mu !== s.mu) applyMu(s, mu);
+  if (c !== s.c) resizePair(s, c);
+}
+
+function applyMu(s, mu) {
+  const scale = s.mu / mu;
+  const serving = (cust, nextD) => {
+    const left = Math.max(0, nextD - s.t) * scale;
+    cust.svc = (s.t - cust.started) + left;
+    return s.t + left;
+  };
+  for (const ln of s.lanes) {
+    for (const cust of ln.q) cust.svc *= scale;
+    if (ln.serving) ln.nextD = serving(ln.serving, ln.nextD);
+  }
+  for (const cust of s.shared.line) cust.svc *= scale;
+  s.shared.servers.forEach((cust, i) => {
+    if (cust) s.shared.nextD[i] = serving(cust, s.shared.nextD[i]);
+  });
+  s.mu = mu;
+}
+
+function park(cust, now, left) {
+  cust.held = (cust.held || 0) + (cust.started - cust.born);
+  cust.born = now;
+  cust.started = null;
+  cust.svc = Math.max(left, 1e-9);
+}
+
+function drainShared(s) {
+  for (;;) {
+    const i = s.shared.servers.findIndex((x) => x == null);
+    if (i < 0 || !s.shared.line.length) break;
+    startShared(s, i, s.shared.line.shift());
+  }
+}
+
+function resizePair(s, c) {
+  if (c > s.c) {
+    for (let i = s.c; i < c; i++) {
+      s.lanes.push(emptyLane());
+      s.shared.servers.push(null);
+      s.shared.nextD.push(Infinity);
+    }
+  } else {
+    const dest = s.lanes[c - 1];
+    for (let i = s.c - 1; i >= c; i--) {
+      const ln = s.lanes[i];
+      if (ln.serving) {
+        park(ln.serving, s.t, Math.max(0, ln.nextD - s.t));
+        dest.q.unshift(ln.serving);
+      }
+      for (const cust of ln.q) dest.q.push(cust);
+      const cust = s.shared.servers[i];
+      if (cust) {
+        park(cust, s.t, Math.max(0, s.shared.nextD[i] - s.t));
+        s.shared.line.unshift(cust);
+      }
+    }
+    s.lanes.length = c;
+    s.shared.servers.length = c;
+    s.shared.nextD.length = c;
+    if (dest.serving == null && dest.q.length) startLane(s, c - 1, dest.q.shift());
+  }
+  s.c = c;
+  drainShared(s);
+  checkShared(s);
 }
 
 function nextEvent(s) {

@@ -1,4 +1,4 @@
-import { mmc, splitMeans, createPair, advancePair, pairStats } from './sim.js';
+import { mmc, splitMeans, createPair, advancePair, pairStats, configurePair } from './sim.js';
 
 const $ = (id) => document.getElementById(id);
 const css = getComputedStyle(document.documentElement);
@@ -485,7 +485,7 @@ function readRates(part) {
   lambda = +$('lam').value;
   mu = +$('mu').value;
   $('spdText').textContent = String(speed);
-  restart();
+  configurePair(sim, lambda, mu, c);
   if (part) locked = focus = part;
   paint();
 }

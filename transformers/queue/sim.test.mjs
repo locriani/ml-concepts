@@ -1,7 +1,7 @@
 // M/M/1 formulas, plus one sample path: the time average settles on L = ρ/(1−ρ),
 // Little's law holds, and ρ > 1 grows a line.
 import assert from 'node:assert';
-import { lcg, mm1, create, advance, stats, mmc, splitMeans, createPair, advancePair, pairStats } from './src/sim.js';
+import { lcg, mm1, create, advance, stats, mmc, splitMeans, createPair, advancePair, pairStats, configurePair } from './src/sim.js';
 
 const near = (a, b, tol, msg) => assert(Math.abs(a - b) < tol, `${msg}: ${a} vs ${b}`);
 
@@ -45,3 +45,25 @@ assert(ps.shared.Wq < ps.lanes.Wq, 'sample path: one line is shorter');
 near(pair.gapSum / pair.gapN, 1 / 2.4, 0.02, 'mean gap is 1/λ');
 near(pair.svcSum / pair.svcN, 1, 0.02, 'mean checkout is 1/μ');
 assert(pair.gaps.length <= 180 && pair.svcs.length <= 180, 'histogram keeps a window');
+
+const live = createPair(2.4, 1, 3, 7);
+advancePair(live, 40);
+const laneN = live.lanes.reduce((a, ln) => a + ln.q.length + (ln.serving ? 1 : 0), 0);
+const sharedN = live.shared.line.length + live.shared.servers.filter(Boolean).length;
+const done = live.shared.nDone;
+assert(done > 0, 'the run has finished someone');
+configurePair(live, 1.2, 0.8, 4);
+assert.equal(live.t, 40);
+assert.equal(live.shared.nDone, done);
+assert.equal(live.c, 4);
+assert.equal(live.lambda, 1.2);
+assert.equal(live.mu, 0.8);
+assert.equal(live.shared.bad, 0);
+configurePair(live, 1.2, 0.8, 1);
+const laneAfter = live.lanes.reduce((a, ln) => a + ln.q.length + (ln.serving ? 1 : 0), 0);
+const sharedAfter = live.shared.line.length + live.shared.servers.filter(Boolean).length;
+assert.equal(laneAfter, laneN, 'closing registers keeps the separate-line people');
+assert.equal(sharedAfter, sharedN, 'closing registers keeps the shared-line people');
+assert.equal(live.shared.bad, 0);
+advancePair(live, 70);
+assert.equal(live.shared.bad, 0, 'a changed store still never waits while a register is idle');
